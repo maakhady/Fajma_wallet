@@ -13,7 +13,10 @@ return new class extends Migration
     {
         Schema::create('payment_status', function (Blueprint $table) {
             $table->id(); // clé primaire auto-incrémentée
-            $table->enum('status_name', ['pending', 'paid', 'failed']); // Statut de la transaction
+            $table->string('name')->unique(); // Nom du statut (code)
+            $table->string('display_name'); // Nom d'affichage pour l'interface
+            $table->text('description')->nullable(); // Description du statut
+            $table->string('color')->nullable(); // Couleur pour l'interface (optionnel)
             $table->timestamps(); // pour created_at et updated_at
         });
     }

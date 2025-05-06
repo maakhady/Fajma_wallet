@@ -11,7 +11,7 @@ class LoginRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true; // Modifié de false à true pour permettre l'accès
     }
 
     /**
@@ -22,8 +22,37 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email'    => 'required|email',
+            'email'    => 'required|email|max:255',
             'password' => 'required|string',
         ];
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     *
+     * @return array
+     */
+    public function messages(): array
+    {
+        return [
+            'email.required' => 'L\'adresse e-mail est obligatoire',
+            'email.email'    => 'Veuillez entrer une adresse e-mail valide',
+            'password.required' => 'Le mot de passe est obligatoire',
+        ];
+    }
+    
+    /**
+     * Prepare the data for validation.
+     * 
+     * @return void
+     */
+    protected function prepareForValidation(): void
+    {
+        // Nettoyer les données avant validation
+        if ($this->has('email')) {
+            $this->merge([
+                'email' => strtolower(trim($this->email)),
+            ]);
+        }
     }
 }

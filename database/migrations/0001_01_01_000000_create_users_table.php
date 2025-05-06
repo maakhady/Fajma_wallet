@@ -16,14 +16,20 @@ return new class extends Migration
             $table->string('first_name');
             $table->string('last_name');
             $table->string('email')->unique();
-            $table->string('phone')->nullable()->unique();
+            $table->string('phone', 20)->nullable()->unique(); // Spécifier une longueur maximale pour le téléphone
             $table->string('profile_photo')->nullable();
             $table->string('password');
-            $table->string('verification_code', 5);
-            $table->enum('role', ['patient', 'admin', 'medecin']);
+            $table->string('verification_code', 5); // Garder tel quel comme vous l'avez demandé
+            $table->enum('role', ['patient', 'admin', 'medecin','prestataire']);
             $table->timestamp('email_verified_at')->nullable();
+            $table->boolean('is_active')->default(true); // Ajout d'un statut d'activité
+            $table->timestamp('last_login_at')->nullable(); // Suivre la dernière connexion
             $table->rememberToken();
             $table->timestamps(); // created_at, updated_at
+            
+            // Ajout d'index pour améliorer les performances des requêtes fréquentes
+            $table->index(['email', 'verification_code']);
+            $table->index('role');
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
@@ -40,6 +46,18 @@ return new class extends Migration
             $table->longText('payload');
             $table->integer('last_activity')->index();
         });
+        
+        // Nouvelle table pour les jetons d'accès personnels (si vous utilisez Sanctum avec JWT)
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->morphs('tokenable');
+            $table->string('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamps();
+        });
     }
 
     /**
@@ -47,6 +65,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('personal_access_tokens');
         Schema::dropIfExists('sessions');
         Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('users');

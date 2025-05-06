@@ -15,10 +15,15 @@ return new class extends Migration
             $table->id(); // clé primaire auto-incrémentée
             $table->string('card_number')->unique(); // Numéro de la carte, unique
             $table->enum('type_card', ['physical', 'virtual']); // Type de carte (physique ou virtuelle)
-            $table->enum('status', ['activated', 'deactivated']); // Statut de la carte (activée ou désactivée)
-            $table->float('solde')->default(0.0); // Solde de la carte
-            $table->foreignId('users_id')->constrained('users'); // Référence vers l'utilisateur (clé étrangère)
+            $table->enum('status', ['activated', 'deactivated', 'blocked']); // Statuts élargis
+            $table->decimal('balance', 10, 2)->default(0.00); // Solde avec précision décimale (renommé de "solde")
+            $table->date('expires_at')->nullable(); // Date d'expiration de la carte
+            $table->foreignId('user_id')->constrained(); // Convention Laravel standard (renommé de "users_id")
             $table->timestamps(); // pour created_at et updated_at
+            
+            // Index pour améliorer les performances
+            $table->index('status');
+            $table->index('user_id');
         });
     }
 

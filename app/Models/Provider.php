@@ -23,6 +23,19 @@ class Provider extends Model
         'phone',
         'email',
         'provider_type',
+        'status',
+        'logo',
+        'description',
+        'commission_rate',
+    ];
+
+    /**
+     * Les attributs à caster.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'commission_rate' => 'decimal:2',
     ];
 
     /**
@@ -34,5 +47,26 @@ class Provider extends Model
     public function transactions()
     {
         return $this->hasMany(Transaction::class);
+    }
+    
+    /**
+     * La méthode qui définit la relation avec l'utilisateur admin associé.
+     * Un provider peut être associé à un utilisateur admin.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+    
+    /**
+     * Détermine si le prestataire est actif
+     *
+     * @return bool
+     */
+    public function isActive()
+    {
+        return $this->status === 'active';
     }
 }

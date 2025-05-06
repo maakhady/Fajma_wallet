@@ -9,7 +9,9 @@ class PaymentMean extends Model
 {
     use HasFactory;
 
-    // Nom de la table dans la base de données
+    /**
+     * Nom de la table dans la base de données
+     */
     protected $table = 'payment_means';
 
     /**
@@ -18,31 +20,55 @@ class PaymentMean extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'payment_type',
+        'payment_type_id',
         'account_identifier',
         'status',
         'user_id',
+        'linked_date',
+        'is_default',
+        'metadata',
     ];
 
     /**
-     * La méthode qui définit la relation avec l'utilisateur.
-     * Un moyen de paiement appartient à un utilisateur.
+     * Les attributs à caster.
      *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'linked_date' => 'datetime',
+        'is_default' => 'boolean',
+        'metadata' => 'array',
+    ];
+
+    /**
+     * Relation avec l'utilisateur
      */
     public function user()
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(User::class);
     }
 
     /**
-     * La méthode qui définit la relation avec les transactions.
-     * Un moyen de paiement peut avoir plusieurs transactions.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     * Relation avec le type de paiement
+     */
+    public function paymentType()
+    {
+        return $this->belongsTo(PaymentType::class);
+    }
+
+    /**
+     * Relation avec les transactions
      */
     public function transactions()
     {
-        return $this->hasMany(Transaction::class);
+        return $this->hasMany(Transaction::class, 'payment_mean_id');
+    }
+    
+    /**
+     * Détermine si le moyen de paiement est actif
+     */
+    public function isActive()
+    {
+        return $this->status === 'active';
     }
 }

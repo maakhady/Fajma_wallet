@@ -9,9 +9,6 @@ class Card extends Model
 {
     use HasFactory;
 
-    // Nom de la table dans la base de données
-    protected $table = 'cards';
-
     /**
      * Les attributs qui peuvent être assignés en masse.
      *
@@ -21,8 +18,19 @@ class Card extends Model
         'card_number',
         'type_card',
         'status',
-        'solde',
-        'users_id',
+        'balance',
+        'expires_at',
+        'user_id',
+    ];
+
+    /**
+     * Les attributs à caster.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'balance' => 'decimal:2',
+        'expires_at' => 'date',
     ];
 
     /**
@@ -33,7 +41,7 @@ class Card extends Model
      */
     public function user()
     {
-        return $this->belongsTo(User::class, 'users_id');
+        return $this->belongsTo(User::class);
     }
 
     /**
@@ -45,5 +53,29 @@ class Card extends Model
     public function transactions()
     {
         return $this->hasMany(Transaction::class);
+    }
+    
+    /**
+     * Détermine si la carte est active.
+     *
+     * @return bool
+     */
+    public function isActive()
+    {
+        return $this->status === 'activated';
+    }
+    
+    /**
+     * Détermine si la carte est expirée.
+     *
+     * @return bool
+     */
+    public function isExpired()
+    {
+        if (!$this->expires_at) {
+            return false;
+        }
+        
+        return $this->expires_at->isPast();
     }
 }

@@ -5,9 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Tymon\JWTAuth\Contracts\JWTSubject;  // <-- Ajouter cette ligne
+use Tymon\JWTAuth\Contracts\JWTSubject;
 
-class User extends Authenticatable implements JWTSubject  // <-- Ajouter l'implémentation de l'interface JWTSubject
+class User extends Authenticatable implements JWTSubject
 {
     use HasFactory, Notifiable;
 
@@ -25,6 +25,8 @@ class User extends Authenticatable implements JWTSubject  // <-- Ajouter l'impl�
         'password',
         'verification_code',
         'role',
+        'is_active',  // Ajouté pour correspondre à la migration
+        'last_login_at',  // Ajouté pour correspondre à la migration
     ];
 
     /**
@@ -46,11 +48,12 @@ class User extends Authenticatable implements JWTSubject  // <-- Ajouter l'impl�
     {
         return [
             'email_verified_at' => 'datetime',
+            'last_login_at' => 'datetime',  // Ajouté pour le nouveau champ
+            'is_active' => 'boolean',      // Ajouté pour le nouveau champ
             'password' => 'hashed',
         ];
     }
 
-    // Implémentation des méthodes requises par l'interface JWTSubject
     /**
      * Récupère l'identifiant JWT de l'utilisateur.
      *
@@ -71,7 +74,32 @@ class User extends Authenticatable implements JWTSubject  // <-- Ajouter l'impl�
         return []; // Tu peux ajouter des revendications personnalisées ici, si besoin
     }
 
-    // Relations (inchangées)
+    /**
+     * Accesseur pour obtenir le nom complet
+     */
+    public function getFullNameAttribute()
+    {
+        return "{$this->first_name} {$this->last_name}";
+    }
+
+    /**
+     * Vérifie si l'utilisateur a un rôle spécifique
+     */
+    public function hasRole(string $role): bool
+    {
+        return $this->role === $role;
+    }
+
+    /**
+     * Met à jour la date de dernière connexion
+     */
+    public function updateLastLogin(): void
+    {
+        $this->last_login_at = now();
+        $this->save();
+    }
+
+    // Relations
     public function cards()
     {
         return $this->hasMany(Card::class);
@@ -85,5 +113,13 @@ class User extends Authenticatable implements JWTSubject  // <-- Ajouter l'impl�
     public function logs()
     {
         return $this->hasMany(Log::class);
+    }
+    
+     /**
+     * Relation avec les moyens de paiement
+     */
+    public function paymentMeans()
+    {
+        return $this->hasMany(PaymentMean::class);
     }
 }

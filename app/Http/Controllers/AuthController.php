@@ -6,6 +6,7 @@ use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth; // Importation manquante
+use App\Http\Controllers\CardController;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -13,6 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
@@ -25,15 +27,18 @@ class AuthController extends Controller
     public function register(RegisterRequest $request)
     {
         try {
+            // Démarrer une transaction pour assurer l'intégrité
+            DB::beginTransaction();
+            
             // 1. Validation déjà effectuée par RegisterRequest
             $data = $request->validated();
-
+    
             // 2. Hash du mot de passe
             $data['password'] = Hash::make($data['password']);
-
+    
             // 3. Génération d'un code de vérification à 5 chiffres
             $data['verification_code'] = sprintf("%05d", mt_rand(0, 99999));
-
+    
             // 4. Gestion de la photo de profil si présente
             if ($request->hasFile('profile_photo')) {
                 $file = $request->file('profile_photo');
@@ -41,24 +46,47 @@ class AuthController extends Controller
                 $file->storeAs('profile-photos', $filename, 'public');
                 $data['profile_photo'] = 'profile-photos/' . $filename;
             }
-
+    
             // 5. Par défaut, l'utilisateur est actif
             $data['is_active'] = true;
-
+    
             // 6. Création de l'utilisateur en base
             $user = User::create($data);
-
-            // 7. Réponse JSON avec l'utilisateur (sans token)
+           
+            // Création automatique de la carte
+            $cardController = new CardController();
+            $card = $cardController->createCardForUser($user);
+            
+            // Vérifier si la carte a été créée avec succès
+            if (!$card) {
+                DB::rollBack();
+                return response()->json([
+                    'error' => 'Erreur lors de la création de la carte'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            
+            // Tout est OK, on peut valider la transaction
+            DB::commit();
+    
+            // 7. S'assurer que les headers de réponse sont corrects
             return response()->json([
                 'message' => 'Inscription réussie.',
-                'user' => $user
-            ], Response::HTTP_CREATED);
+                'user' => $user,
+                'card' => $card
+            ], Response::HTTP_CREATED)->header('Content-Type', 'application/json');
             
         } catch (\Exception $e) {
+            // S'assurer que la transaction est annulée
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            
             Log::error('Erreur inscription: ' . $e->getMessage());
+            
+            // S'assurer que même en cas d'erreur, on renvoie du JSON
             return response()->json([
                 'error' => 'Erreur lors de l\'inscription: ' . $e->getMessage()
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            ], Response::HTTP_INTERNAL_SERVER_ERROR)->header('Content-Type', 'application/json');
         }
     }
 

@@ -15,7 +15,8 @@ return new class extends Migration
             $table->id(); // Auto-increment ID
             $table->string('first_name');
             $table->string('last_name');
-            $table->string('email')->unique();
+            $table->string('email')->unique(); // identifiant de la plateforme avec @fajma.sn
+            $table->string('contact_email')->unique(); // contact mail
             $table->string('phone', 20)->nullable()->unique(); // Spécifier une longueur maximale pour le téléphone
             $table->string('profile_photo')->nullable();
             $table->string('password');
@@ -26,9 +27,10 @@ return new class extends Migration
             $table->timestamp('last_login_at')->nullable(); // Suivre la dernière connexion
             $table->rememberToken();
             $table->timestamps(); // created_at, updated_at
-            
+
             // Ajout d'index pour améliorer les performances des requêtes fréquentes
             $table->index(['email', 'verification_code']);
+            $table->index('contact_email');
             $table->index('role');
         });
 
@@ -46,7 +48,7 @@ return new class extends Migration
             $table->longText('payload');
             $table->integer('last_activity')->index();
         });
-        
+
         // Nouvelle table pour les jetons d'accès personnels (si vous utilisez Sanctum avec JWT)
         Schema::create('personal_access_tokens', function (Blueprint $table) {
             $table->id();

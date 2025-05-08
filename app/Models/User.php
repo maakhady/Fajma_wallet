@@ -19,14 +19,15 @@ class User extends Authenticatable implements JWTSubject
     protected $fillable = [
         'first_name',
         'last_name',
-        'email',
+        'email', //identifiant de la plateforme avec @fajma.sn
+        'contact_email',// contact mail 
         'phone',
         'profile_photo',
         'password',
         'verification_code',
         'role',
-        'is_active',  // Ajouté pour correspondre à la migration
-        'last_login_at',  // Ajouté pour correspondre à la migration
+        'is_active',
+        'last_login_at',
     ];
 
     /**
@@ -48,8 +49,8 @@ class User extends Authenticatable implements JWTSubject
     {
         return [
             'email_verified_at' => 'datetime',
-            'last_login_at' => 'datetime',  // Ajouté pour le nouveau champ
-            'is_active' => 'boolean',      // Ajouté pour le nouveau champ
+            'last_login_at' => 'datetime',
+            'is_active' => 'boolean',
             'password' => 'hashed',
         ];
     }
@@ -114,8 +115,8 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Log::class);
     }
-    
-     /**
+
+    /**
      * Relation avec les moyens de paiement
      */
     public function paymentMeans()

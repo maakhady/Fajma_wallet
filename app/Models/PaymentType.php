@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes; // Ajoutez cette ligne
+
 
 class PaymentType extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes; // Ajoutez cette ligne
 
     /**
      * Les attributs qui peuvent être assignés en masse.
@@ -31,6 +33,8 @@ class PaymentType extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'config' => 'array',
+        'deleted_at' => 'datetime', // Ajoutez cette ligne
+
     ];
 
     /**

@@ -54,7 +54,7 @@ class Card extends Model
     {
         return $this->hasMany(Transaction::class);
     }
-    
+
     /**
      * Détermine si la carte est active.
      *
@@ -64,7 +64,7 @@ class Card extends Model
     {
         return $this->status === 'activated';
     }
-    
+
     /**
      * Détermine si la carte est expirée.
      *
@@ -75,7 +75,7 @@ class Card extends Model
         if (!$this->expires_at) {
             return false;
         }
-        
+
         return $this->expires_at->isPast();
     }
 }

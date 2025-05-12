@@ -6,7 +6,6 @@ use App\Models\PaymentType;
 use App\Models\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log as LogFacade;
 
 class PaymentTypeService
@@ -82,20 +81,6 @@ class PaymentTypeService
     public function createPaymentType(array $data)
     {
         try {
-            // Valider les données
-            $validator = Validator::make($data, [
-                'name' => 'required|string|unique:payment_types,name',
-                'display_name' => 'required|string',
-                'description' => 'nullable|string',
-                'icon' => 'nullable|image|mimes:jpeg,png,jpg,svg|max:2048',
-                'is_active' => 'boolean',
-                'config' => 'nullable|array'
-            ]);
-
-            if ($validator->fails()) {
-                throw new \Exception('Données invalides: ' . json_encode($validator->errors()));
-            }
-
             // Traiter l'icône si elle est fournie
             if (isset($data['icon']) && $data['icon']) {
                 $iconPath = $this->storeIcon($data['icon']);
@@ -127,27 +112,13 @@ class PaymentTypeService
         try {
             $paymentType = $this->getPaymentTypeById($id);
 
-            // Valider les données
-            $validator = Validator::make($data, [
-                'name' => 'string|unique:payment_types,name,' . $id,
-                'display_name' => 'string',
-                'description' => 'nullable|string',
-                'icon' => 'nullable|image|mimes:jpeg,png,jpg,svg|max:2048',
-                'is_active' => 'boolean',
-                'config' => 'nullable|array'
-            ]);
-
-            if ($validator->fails()) {
-                throw new \Exception('Données invalides: ' . json_encode($validator->errors()));
-            }
-
             // Traiter l'icône si elle est fournie
             if (isset($data['icon']) && $data['icon']) {
                 // Supprimer l'ancienne icône si elle existe
                 if ($paymentType->icon) {
                     Storage::delete($paymentType->icon);
                 }
-                
+
                 $iconPath = $this->storeIcon($data['icon']);
                 $data['icon'] = $iconPath;
             }
@@ -236,54 +207,102 @@ class PaymentTypeService
     }
 
     /**
-     * Supprimer un type de paiement
-     *
-     * @param int $id
-     * @return bool
-     */
-    public function deletePaymentType($id)
-    {
-        try {
-            $paymentType = $this->getPaymentTypeById($id);
+ * Supprimer un type de paiement (soft delete)
+ *
+ * @param int $id
+ * @return bool
+ */
+public function deletePaymentType($id)
+{
+    try {
+        $paymentType = $this->getPaymentTypeById($id);
 
-            // Vérifier si le type de paiement est utilisé par des moyens de paiement
-            if ($paymentType->paymentMeans()->count() > 0) {
-                throw new \Exception('Ce type de paiement est utilisé par des moyens de paiement et ne peut pas être supprimé.');
-            }
-
-            // Supprimer l'icône si elle existe
-            if ($paymentType->icon) {
-                Storage::delete($paymentType->icon);
-            }
-
-            // Journaliser la suppression avant de supprimer
-            $this->logAction('delete_payment_type', $paymentType->id, 'Suppression du type de paiement: ' . $paymentType->display_name);
-
-            // Supprimer le type de paiement
-            return $paymentType->delete();
-        } catch (\Exception $e) {
-            LogFacade::error('Erreur lors de la suppression du type de paiement: ' . $e->getMessage());
-            throw $e;
+        // Vérifier si le type de paiement est utilisé par des moyens de paiement
+        if ($paymentType->paymentMeans()->count() > 0) {
+            throw new \Exception('Ce type de paiement est utilisé par des moyens de paiement et ne peut pas être supprimé.');
         }
-    }
 
-    /**
-     * Récupérer la configuration d'un type de paiement
-     *
-     * @param int $id
-     * @return array|null
-     */
-    public function getPaymentTypeConfig($id)
-    {
-        try {
-            $paymentType = $this->getPaymentTypeById($id);
-            return $paymentType->config;
-        } catch (\Exception $e) {
-            LogFacade::error('Erreur lors de la récupération de la configuration du type de paiement: ' . $e->getMessage());
-            throw $e;
+        // Le modèle garde l'icône car elle pourrait être nécessaire en cas de restauration
+        // Nous ne supprimons donc plus l'icône: Storage::delete($paymentType->icon);
+
+        // Journaliser la suppression avant de supprimer
+        $this->logAction('delete_payment_type', $paymentType->id, 'Suppression logique du type de paiement: ' . $paymentType->display_name);
+
+        // Soft delete - cela définit juste deleted_at et conserve la ligne
+        return $paymentType->delete();
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur lors de la suppression du type de paiement: ' . $e->getMessage());
+        throw $e;
+    }
+}
+
+/**
+ * Restaurer un type de paiement supprimé
+ *
+ * @param int $id
+ * @return bool
+ */
+public function restorePaymentType($id)
+{
+    try {
+        $paymentType = PaymentType::withTrashed()->findOrFail($id);
+
+        // Journaliser la restauration
+        $this->logAction('restore_payment_type', $paymentType->id, 'Restauration du type de paiement: ' . $paymentType->display_name);
+
+        return $paymentType->restore();
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur lors de la restauration du type de paiement: ' . $e->getMessage());
+        throw $e;
+    }
+}
+
+/**
+ * Supprimer définitivement un type de paiement
+ *
+ * @param int $id
+ * @return bool
+ */
+public function forceDeletePaymentType($id)
+{
+    try {
+        $paymentType = PaymentType::withTrashed()->findOrFail($id);
+
+        // Vérifier si le type de paiement est utilisé par des moyens de paiement
+        if ($paymentType->paymentMeans()->count() > 0) {
+            throw new \Exception('Ce type de paiement est utilisé par des moyens de paiement et ne peut pas être supprimé définitivement.');
         }
-    }
 
+        // Supprimer l'icône car maintenant c'est une suppression définitive
+        if ($paymentType->icon) {
+            Storage::delete($paymentType->icon);
+        }
+
+        // Journaliser la suppression définitive
+        $this->logAction('force_delete_payment_type', $paymentType->id, 'Suppression définitive du type de paiement: ' . $paymentType->display_name);
+
+        // Suppression définitive
+        return $paymentType->forceDelete();
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur lors de la suppression définitive du type de paiement: ' . $e->getMessage());
+        throw $e;
+    }
+}
+
+/**
+ * Récupérer les types de paiement supprimés
+ *
+ * @return \Illuminate\Database\Eloquent\Collection
+ */
+public function getTrashedPaymentTypes()
+{
+    try {
+        return PaymentType::onlyTrashed()->get();
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur lors de la récupération des types de paiement supprimés: ' . $e->getMessage());
+        throw $e;
+    }
+}
     /**
      * Mettre à jour la configuration d'un type de paiement
      *
@@ -309,19 +328,90 @@ class PaymentTypeService
     }
 
     /**
-     * Vérifier si un type de paiement est disponible
+     * Configurer le type de paiement Wave
      *
-     * @param int $id
-     * @return bool
+     * @param array $data
+     * @return PaymentType
      */
-    public function isPaymentTypeAvailable($id)
+    public function configureWave(array $data)
     {
         try {
-            $paymentType = $this->getPaymentTypeById($id);
-            return $paymentType->is_active;
+            // Récupérer ou créer le type de paiement Wave
+            $paymentType = $this->getPaymentTypeByName('wave');
+
+            if (!$paymentType) {
+                return $this->createPaymentType([
+                    'name' => 'wave',
+                    'display_name' => 'Wave',
+                    'description' => 'Paiement via Wave Money Transfer',
+                    'icon' => 'images/payment-types/wave.png',
+                    'is_active' => true,
+                    'config' => [
+                        'api_key' => $data['api_key'],
+                        'api_secret' => $data['api_secret'],
+                        'webhook_url' => url('/api/webhooks/wave'),
+                        'merchant_id' => $data['merchant_id'],
+                        'environment' => $data['environment']
+                    ]
+                ]);
+            } else {
+                // Mettre à jour la configuration
+                $config = $paymentType->config ?? [];
+                $config['api_key'] = $data['api_key'];
+                $config['api_secret'] = $data['api_secret'];
+                $config['webhook_url'] = url('/api/webhooks/wave');
+                $config['merchant_id'] = $data['merchant_id'];
+                $config['environment'] = $data['environment'];
+
+                return $this->updatePaymentTypeConfig($paymentType->id, $config);
+            }
         } catch (\Exception $e) {
-            LogFacade::error('Erreur lors de la vérification de la disponibilité du type de paiement: ' . $e->getMessage());
-            return false;
+            LogFacade::error('Erreur lors de la configuration de Wave: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Configurer le type de paiement Orange Money
+     *
+     * @param array $data
+     * @return PaymentType
+     */
+    public function configureOrangeMoney(array $data)
+    {
+        try {
+            // Récupérer ou créer le type de paiement Orange Money
+            $paymentType = $this->getPaymentTypeByName('orange_money');
+
+            if (!$paymentType) {
+                return $this->createPaymentType([
+                    'name' => 'orange_money',
+                    'display_name' => 'Orange Money',
+                    'description' => 'Paiement via Orange Money',
+                    'icon' => 'images/payment-types/orange-money.png',
+                    'is_active' => true,
+                    'config' => [
+                        'api_key' => $data['api_key'],
+                        'api_secret' => $data['api_secret'],
+                        'callback_url' => url('/api/webhooks/orange-money'),
+                        'merchant_id' => $data['merchant_id'],
+                        'environment' => $data['environment']
+                    ]
+                ]);
+            } else {
+                // Mettre à jour la configuration
+                $config = $paymentType->config ?? [];
+                $config['api_key'] = $data['api_key'];
+                $config['api_secret'] = $data['api_secret'];
+                $config['callback_url'] = url('/api/webhooks/orange-money');
+                $config['merchant_id'] = $data['merchant_id'];
+                $config['environment'] = $data['environment'];
+
+                return $this->updatePaymentTypeConfig($paymentType->id, $config);
+            }
+        } catch (\Exception $e) {
+            LogFacade::error('Erreur lors de la configuration d\'Orange Money: ' . $e->getMessage());
+            throw $e;
         }
     }
 

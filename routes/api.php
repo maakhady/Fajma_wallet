@@ -93,6 +93,8 @@ Route::group(['middleware' => ['auth:api'], 'prefix' => 'users'], function () {
     // Routes accessibles par tous les utilisateurs authentifiés
     Route::put('/profile', [UserController::class, 'updateProfile']); // Mettre cette route en premier
     Route::post('/change-password', [UserController::class, 'changePassword']);
+    Route::get('/archived', [UserController::class, 'trashed']); // Liste des utilisateurs archivés
+
 
     // Routes accessibles uniquement par l'admin
     Route::get('/', [UserController::class, 'index']);
@@ -101,6 +103,14 @@ Route::group(['middleware' => ['auth:api'], 'prefix' => 'users'], function () {
     Route::patch('/{id}/toggle-active', [UserController::class, 'toggleActive']);
     Route::patch('/{id}/change-role', [UserController::class, 'changeRole']);
     Route::post('/{id}/reset-password', [UserController::class, 'resetPassword']);
+
+    // Routes standard
+    Route::delete('/{id}', [UserController::class, 'destroy']); // Archiver un utilisateur (soft delete)
+
+    // Routes pour les utilisateurs archivés
+    Route::get('/archived', [UserController::class, 'trashed']); // Liste des utilisateurs archivés
+    Route::post('/{id}/restore', [UserController::class, 'restore']); // Restaurer un utilisateur archivé
+    Route::get('/{id}/history', [UserController::class, 'userHistory']); // Voir l'historique complet d'un utilisateur
 });
 
 
@@ -112,37 +122,34 @@ Route::group(['middleware' => ['auth:api'], 'prefix' => 'users'], function () {
 
 use App\Http\Controllers\PaymentTypeController;
 
+// Routes pour la gestion des types de paiement (protégées par auth:api)
 // Routes pour les types de paiement
 Route::prefix('payment-types')->group(function () {
-    // Routes publiques
+    // Routes publiques (sans authentification requise)
     Route::get('/', [PaymentTypeController::class, 'index']);
-    Route::get('/{id}', [PaymentTypeController::class, 'show']);
+    Route::get('/{id}', [PaymentTypeController::class, 'show'])->where('id', '[0-9]+');
 
-    // Routes protégées par authentification
+    // Routes nécessitant une authentification
+    // (le contrôleur gère déjà la vérification du rôle admin)
     Route::middleware('auth:api')->group(function () {
-        // Routes administrateur
-        Route::middleware('role:admin')->group(function () {
-            // Opérations CRUD
-            Route::get('/admin/all', [PaymentTypeController::class, 'indexAdmin']);
-            Route::post('/', [PaymentTypeController::class, 'store']);
-            Route::put('/{id}', [PaymentTypeController::class, 'update']);
-            Route::delete('/{id}', [PaymentTypeController::class, 'destroy']);
+        // Opérations administratives - segments fixes d'abord
+        Route::get('/admin/all', [PaymentTypeController::class, 'indexAdmin']);
+        Route::post('/configure-wave', [PaymentTypeController::class, 'configureWave']); //a tester avec le webhook.wave
+        Route::post('/configure-orange-money', [PaymentTypeController::class, 'configureOrangeMoney']); //a tester avec le webhook.orange_money
+        Route::post('/', [PaymentTypeController::class, 'store']);
 
-            // Gestion des statuts
-            Route::post('/{id}/activate', [PaymentTypeController::class, 'activate']);
-            Route::post('/{id}/deactivate', [PaymentTypeController::class, 'deactivate']);
-            Route::post('/{id}/toggle-status', [PaymentTypeController::class, 'toggleStatus']);
-
-            // Gestion des configurations
-            Route::put('/{id}/config', [PaymentTypeController::class, 'updateConfig']);
-
-            // Configurations spécifiques pour les prestataires de paiement
-            Route::post('/configure-wave', [PaymentTypeController::class, 'configureWave']);
-            Route::post('/configure-orange-money', [PaymentTypeController::class, 'configureOrangeMoney']);
-        });
+        // Routes avec paramètres
+        Route::put('/{id}', [PaymentTypeController::class, 'update'])->where('id', '[0-9]+');
+        Route::delete('/{id}', [PaymentTypeController::class, 'destroy'])->where('id', '[0-9]+'); // Supprimer un type de paiement (soft delete)
+        Route::get('/trashed', [PaymentTypeController::class, 'trashed']); // recupere tous les types de paiement supprimés
+        Route::post('/{id}/restore', [PaymentTypeController::class, 'restore'])->where('id', '[0-9]+'); // restaurer un type de paiement supprimé
+        Route::delete('/{id}/forcedelete', [PaymentTypeController::class, 'forceDelete'])->where('id', '[0-9]+'); // supprimer définitivement un type de paiement
+        Route::post('/{id}/activate', [PaymentTypeController::class, 'activate'])->where('id', '[0-9]+');
+        Route::post('/{id}/deactivate', [PaymentTypeController::class, 'deactivate'])->where('id', '[0-9]+');
+        Route::post('/{id}/toggle-status', [PaymentTypeController::class, 'toggleStatus'])->where('id', '[0-9]+');
+        Route::put('/{id}/config', [PaymentTypeController::class, 'updateConfig'])->where('id', '[0-9]+');
     });
 });
-
 
 
 // Routes pour les webhooks de paiement (sans authentification)

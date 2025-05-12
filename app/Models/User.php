@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends Authenticatable implements JWTSubject
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -20,7 +21,7 @@ class User extends Authenticatable implements JWTSubject
         'first_name',
         'last_name',
         'email', //identifiant de la plateforme avec @fajma.sn
-        'contact_email',// contact mail 
+        'contact_email',// contact mail
         'phone',
         'profile_photo',
         'password',
@@ -52,6 +53,7 @@ class User extends Authenticatable implements JWTSubject
             'last_login_at' => 'datetime',
             'is_active' => 'boolean',
             'password' => 'hashed',
+            'deleted_at' => 'datetime', // Ajout de la conversion pour deleted_at
         ];
     }
 

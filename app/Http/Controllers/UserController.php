@@ -41,6 +41,10 @@ class UserController extends Controller
             // Construire la requête
             $query = User::query();
 
+            // Exclure l'utilisateur actuellement connecté de la liste
+            $query->where('id', '!=', $currentUser->id);
+
+
             // Appliquer les filtres si présents
             if ($role) {
                 $query->where('role', $role);
@@ -554,4 +558,239 @@ class UserController extends Controller
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
+
+
+
+
+
+
+
+
+
+
+
+        /**
+     * Archiver un utilisateur (Soft Delete) - Admin uniquement
+     * L'utilisateur sera marqué comme supprimé mais toutes ses données/actions restent dans le système
+     *on marque supprimer mais en réalité c'est archivé
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function destroy($id)
+{
+    try {
+        // Vérifier que l'utilisateur est admin
+        $currentUser = auth('api')->user();
+        if (!$currentUser || !$currentUser->hasRole('admin')) {
+            return response()->json([
+                'error' => 'Accès non autorisé. Seuls les administrateurs peuvent supprimer des utilisateurs.'
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        $user = User::findOrFail($id);
+
+        // Un admin ne peut pas se supprimer lui-même
+        if ($user->id === $currentUser->id) {
+            return response()->json([
+                'error' => 'Vous ne pouvez pas supprimer votre propre compte.'
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        // Information sur l'utilisateur pour la réponse et le log
+        $userInfo = [
+            'id' => $user->id,
+            'name' => $user->first_name . ' ' . $user->last_name,
+            'email' => $user->email,
+            'contact_email' => $user->contact_email,
+            'role' => $user->role
+        ];
+
+        // Soft delete l'utilisateur
+        $user->delete();
+
+        // Journaliser l'action
+        Log::create([
+            'user_id' => $currentUser->id,
+            'action' => 'delete_user',
+            'entity_type' => 'user',
+            'entity_id' => $userInfo['id'],
+            'description' => 'Suppression de l\'utilisateur ' . $userInfo['name'] . ' (' . $userInfo['email'] . ') par administrateur'
+        ]);
+
+        return response()->json([
+            'message' => 'Utilisateur supprimé avec succès. Ses données historiques restent accessibles.',
+            'user_details' => $userInfo
+        ]);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'error' => 'Utilisateur non trouvé.'
+        ], Response::HTTP_NOT_FOUND);
+    } catch (\Exception $e) {
+        Log::error('Erreur lors de la suppression de l\'utilisateur: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de la suppression de l\'utilisateur: ' . $e->getMessage()
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+    /**
+     * Restaurer un utilisateur archivé - Admin uniquement
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function restore($id)
+    {
+        try {
+            // Vérifier que l'utilisateur est admin
+            $currentUser = auth('api')->user();
+            if (!$currentUser || !$currentUser->hasRole('admin')) {
+                return response()->json([
+                    'error' => 'Accès non autorisé. Seuls les administrateurs peuvent restaurer des utilisateurs.'
+                ], Response::HTTP_FORBIDDEN);
+            }
+
+            // Trouver l'utilisateur archivé
+            $user = User::onlyTrashed()->findOrFail($id);
+
+            // Restaurer l'utilisateur
+            $user->restore();
+
+            // Journaliser l'action
+            Log::create([
+                'user_id' => $currentUser->id,
+                'action' => 'restore_user',
+                'entity_type' => 'user',
+                'entity_id' => $user->id,
+                'description' => 'Restauration de l\'utilisateur ' . $user->first_name . ' ' . $user->last_name . ' (' . $user->email . ') par administrateur'
+            ]);
+
+            return response()->json([
+                'message' => 'Utilisateur restauré avec succès.',
+                'user' => $user
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'error' => 'Utilisateur archivé non trouvé.'
+            ], Response::HTTP_NOT_FOUND);
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la restauration de l\'utilisateur: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Erreur lors de la restauration de l\'utilisateur: ' . $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Liste des utilisateurs archivés - Admin uniquement
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function trashed(Request $request)
+    {
+        try {
+            // Vérifier que l'utilisateur est admin
+            $currentUser = auth('api')->user();
+            if (!$currentUser || !$currentUser->hasRole('admin')) {
+                return response()->json([
+                    'error' => 'Accès non autorisé. Seuls les administrateurs peuvent voir les utilisateurs archivés.'
+                ], Response::HTTP_FORBIDDEN);
+            }
+
+            // Paramètres de pagination
+            $perPage = $request->input('per_page', 15);
+
+            // Récupérer uniquement les utilisateurs archivés
+            $trashedUsers = User::onlyTrashed()
+                ->orderBy('deleted_at', 'desc')
+                ->paginate($perPage);
+
+            // Journaliser l'action
+            Log::create([
+                'user_id' => $currentUser->id,
+                'action' => 'view_archived_users',
+                'entity_type' => 'user',
+                'entity_id' => null,
+                'description' => 'Consultation de la liste des utilisateurs archivés'
+            ]);
+
+            return response()->json([
+                'archived_users' => $trashedUsers,
+                'total' => $trashedUsers->total(),
+                'current_page' => $trashedUsers->currentPage(),
+                'per_page' => $trashedUsers->perPage(),
+                'last_page' => $trashedUsers->lastPage()
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la récupération des utilisateurs archivés: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Erreur lors de la récupération des utilisateurs archivés: ' . $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Voir toutes les actions d'un utilisateur (même archivé) - Admin uniquement
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function userHistory($id)
+    {
+        try {
+            // Vérifier que l'utilisateur est admin
+            $currentUser = auth('api')->user();
+            if (!$currentUser || !$currentUser->hasRole('admin')) {
+                return response()->json([
+                    'error' => 'Accès non autorisé. Seuls les administrateurs peuvent accéder à cette ressource.'
+                ], Response::HTTP_FORBIDDEN);
+            }
+
+            // Trouver l'utilisateur (même s'il est archivé)
+            $user = User::withTrashed()->findOrFail($id);
+
+            // Récupérer les données historiques
+            $cards = $user->cards()->get();
+            $transactions = $user->transactions()->get();
+            $logs = $user->logs()->get();
+            $paymentMeans = $user->paymentMeans()->get();
+
+            // Journaliser l'action
+            Log::create([
+                'user_id' => $currentUser->id,
+                'action' => 'view_user_history',
+                'entity_type' => 'user',
+                'entity_id' => $user->id,
+                'description' => 'Consultation de l\'historique complet de l\'utilisateur ' . $user->first_name . ' ' . $user->last_name
+            ]);
+
+            return response()->json([
+                'user' => $user,
+                'is_archived' => $user->trashed(),
+                'cards' => $cards,
+                'transactions' => $transactions,
+                'payment_means' => $paymentMeans,
+                'logs' => $logs
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'error' => 'Utilisateur non trouvé.'
+            ], Response::HTTP_NOT_FOUND);
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la récupération de l\'historique utilisateur: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Erreur lors de la récupération de l\'historique utilisateur: ' . $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+
+
+
 }

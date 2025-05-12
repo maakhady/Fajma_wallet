@@ -190,10 +190,10 @@ Route::prefix('providers')->group(function () {
         Route::put('/{id}', [ProviderController::class, 'update'])->where('id', '[0-9]+');
         Route::delete('/{id}', [ProviderController::class, 'destroy'])->where('id', '[0-9]+');
         Route::post('/{id}/activate', [ProviderController::class, 'activate'])->where('id', '[0-9]+');
-        Route::post('/{id}/deactivate', [ProviderController::class, 'deactivate'])->where('id', '[0-9]+');
+        Route::post('/{id}/desactivate', [ProviderController::class, 'deactivate'])->where('id', '[0-9]+');
         Route::post('/{id}/pending', [ProviderController::class, 'pending'])->where('id', '[0-9]+');
         Route::put('/{id}/commission', [ProviderController::class, 'updateCommission'])->where('id', '[0-9]+');
         Route::post('/{id}/restore', [ProviderController::class, 'restore'])->where('id', '[0-9]+');
-        Route::delete('/{id}/force', [ProviderController::class, 'forceDelete'])->where('id', '[0-9]+');
+        Route::delete('/{id}/forcedelete', [ProviderController::class, 'forceDelete'])->where('id', '[0-9]+');
     });
 });

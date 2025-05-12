@@ -155,3 +155,45 @@ Route::prefix('payment-types')->group(function () {
 // Routes pour les webhooks de paiement (sans authentification)
 // Route::post('/webhooks/wave', [WebhookController::class, 'handleWave'])->name('webhooks.wave');
 // Route::post('/webhooks/orange-money', [WebhookController::class, 'handleOrangeMoney'])->name('webhooks.orange_money');
+
+
+/*
+|--------------------------------------------------------------------------
+| API Routes for Providers
+|--------------------------------------------------------------------------
+*/
+
+
+use App\Http\Controllers\ProviderController;
+
+// Routes pour les prestataires
+Route::prefix('providers')->group(function () {
+    // Routes publiques (pour récupérer la liste des prestataires actifs)
+    Route::get('/', [ProviderController::class, 'index']);
+    Route::get('/health', [ProviderController::class, 'getHealthProviders']);
+    Route::get('/financial', [ProviderController::class, 'getFinancialServices']);
+    Route::get('/{id}', [ProviderController::class, 'show'])->where('id', '[0-9]+');
+
+    // Routes protégées par authentification
+    Route::middleware('auth:api')->group(function () {
+        // Routes administrateur - routes à segments fixes d'abord
+        Route::get('/admin/all', [ProviderController::class, 'indexAdmin']);
+        Route::get('/trashed', [ProviderController::class, 'trashed']);
+        Route::post('/', [ProviderController::class, 'store']);
+        Route::get('/', [ProviderController::class, 'index']);
+        Route::get('/health', [ProviderController::class, 'getHealthProviders']);
+        Route::get('/financial', [ProviderController::class, 'getFinancialServices']);
+        Route::get('/{id}', [ProviderController::class, 'show'])->where('id', '[0-9]+');
+
+
+        // Routes administrateur avec paramètres
+        Route::put('/{id}', [ProviderController::class, 'update'])->where('id', '[0-9]+');
+        Route::delete('/{id}', [ProviderController::class, 'destroy'])->where('id', '[0-9]+');
+        Route::post('/{id}/activate', [ProviderController::class, 'activate'])->where('id', '[0-9]+');
+        Route::post('/{id}/deactivate', [ProviderController::class, 'deactivate'])->where('id', '[0-9]+');
+        Route::post('/{id}/pending', [ProviderController::class, 'pending'])->where('id', '[0-9]+');
+        Route::put('/{id}/commission', [ProviderController::class, 'updateCommission'])->where('id', '[0-9]+');
+        Route::post('/{id}/restore', [ProviderController::class, 'restore'])->where('id', '[0-9]+');
+        Route::delete('/{id}/force', [ProviderController::class, 'forceDelete'])->where('id', '[0-9]+');
+    });
+});

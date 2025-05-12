@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
 
 class Provider extends Model
 {
-    use HasFactory;
+    use HasFactory , SoftDeletes;
 
     // Nom de la table dans la base de données
     protected $table = 'providers';
@@ -36,6 +38,7 @@ class Provider extends Model
      */
     protected $casts = [
         'commission_rate' => 'decimal:2',
+        'deleted_at'=> 'datetime',
     ];
 
     /**
@@ -48,7 +51,7 @@ class Provider extends Model
     {
         return $this->hasMany(Transaction::class);
     }
-    
+
     /**
      * La méthode qui définit la relation avec l'utilisateur admin associé.
      * Un provider peut être associé à un utilisateur admin.
@@ -59,7 +62,7 @@ class Provider extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
-    
+
     /**
      * Détermine si le prestataire est actif
      *
@@ -69,4 +72,26 @@ class Provider extends Model
     {
         return $this->status === 'active';
     }
+
+    /**
+     * Détermine si c'est un prestataire de santé
+     *
+     * @return bool
+     */
+    public function isHealthProvider()
+    {
+        return $this->provider_type === 'prestataire_sante';
+    }
+
+    /**
+     * Détermine si c'est un service financier
+     *
+     * @return bool
+     */
+    public function isFinancialService()
+    {
+        return $this->provider_type === 'service_finance';
+    }
+
+
 }

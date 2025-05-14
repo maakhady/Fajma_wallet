@@ -197,3 +197,27 @@ Route::prefix('providers')->group(function () {
         Route::delete('/{id}/forcedelete', [ProviderController::class, 'forceDelete'])->where('id', '[0-9]+');
     });
 });
+
+
+
+/*
+|--------------------------------------------------------------------------
+| API Routes for payment status
+|--------------------------------------------------------------------------
+*/
+
+
+use App\Http\Controllers\PaymentStatusController;
+
+
+
+// Routes pour la gestion des statuts de paiement
+Route::prefix('payment-statuses')->group(function () {
+    Route::get('/', [PaymentStatusController::class, 'index']);
+    Route::get('/{id}', [PaymentStatusController::class, 'show']);
+    Route::post('/', [PaymentStatusController::class, 'store']);
+    Route::put('/{id}', [PaymentStatusController::class, 'update']);
+    Route::delete('/{id}', [PaymentStatusController::class, 'destroy']);
+    Route::post('/initialize', [PaymentStatusController::class, 'initialize']);
+    Route::get('/transactions/count', [PaymentStatusController::class, 'getTransactionsCount']);
+});

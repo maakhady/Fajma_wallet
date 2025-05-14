@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PaymentMean extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * Nom de la table dans la base de données
@@ -38,6 +39,7 @@ class PaymentMean extends Model
         'linked_date' => 'datetime',
         'is_default' => 'boolean',
         'metadata' => 'array',
+        'deleted_at' => 'datetime',
     ];
 
     /**
@@ -63,7 +65,7 @@ class PaymentMean extends Model
     {
         return $this->hasMany(Transaction::class, 'payment_mean_id');
     }
-    
+
     /**
      * Détermine si le moyen de paiement est actif
      */

@@ -39,7 +39,7 @@ class PaymentMean extends Model
         'linked_date' => 'datetime',
         'is_default' => 'boolean',
         'metadata' => 'array',
-        'deleted_at' => 'datetime',
+        'deleted_at' => 'datetime', 
     ];
 
     /**

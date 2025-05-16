@@ -221,3 +221,39 @@ Route::prefix('payment-statuses')->group(function () {
     Route::post('/initialize', [PaymentStatusController::class, 'initialize']);
     Route::get('/transactions/count', [PaymentStatusController::class, 'getTransactionsCount']);
 });
+
+
+
+/*
+|--------------------------------------------------------------------------
+| API Routes for payment meanings
+|--------------------------------------------------------------------------
+*/
+
+
+use App\Http\Controllers\PaymentMeanController;
+
+// Routes pour les moyens de paiement
+Route::prefix('payment-means')->middleware(['auth:api'])->group(function () {
+    // Routes avec des chemins spécifiques (sans paramètres variables)
+    Route::get('/user', [PaymentMeanController::class, 'getUserPaymentMeans']);
+    Route::get('/user/default', [PaymentMeanController::class, 'getUserDefaultPaymentMean']);
+    Route::post('/validate-identifier', [PaymentMeanController::class, 'validateIdentifier']);
+    Route::get('/trashed', [PaymentMeanController::class, 'trashed']);
+    Route::get('/transactions/count', [PaymentMeanController::class, 'getTransactionsCount']);
+    Route::get('/', [PaymentMeanController::class, 'index']);
+    Route::post('/', [PaymentMeanController::class, 'store']);
+
+    // Routes avec des paramètres pour les moyens supprimés
+    Route::patch('/trashed/{id}/restore', [PaymentMeanController::class, 'restore']);
+    Route::delete('/trashed/{id}', [PaymentMeanController::class, 'forceDelete']);
+
+    // Routes avec des paramètres pour les moyens normaux
+    Route::get('/{id}/decrypt', [PaymentMeanController::class, 'decryptAccountIdentifier']);
+    Route::patch('/{id}/activate', [PaymentMeanController::class, 'activate']);
+    Route::patch('/{id}/deactivate', [PaymentMeanController::class, 'deactivate']);
+    Route::patch('/{id}/set-default', [PaymentMeanController::class, 'setAsDefault']);
+    Route::get('/{id}', [PaymentMeanController::class, 'show']);
+    Route::put('/{id}', [PaymentMeanController::class, 'update']);
+    Route::delete('/{id}', [PaymentMeanController::class, 'destroy']);
+});

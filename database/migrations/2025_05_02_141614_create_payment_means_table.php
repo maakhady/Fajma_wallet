@@ -21,7 +21,7 @@ return new class extends Migration
             $table->boolean('is_default')->default(false); // Moyen de paiement par défaut
             $table->json('metadata')->nullable(); // Données supplémentaires
             $table->timestamps();
-            
+
             // Index pour optimiser les performances
             $table->index(['user_id', 'status']);
             $table->index('payment_type_id');

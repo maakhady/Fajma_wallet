@@ -257,3 +257,67 @@ Route::prefix('payment-means')->middleware(['auth:api'])->group(function () {
     Route::put('/{id}', [PaymentMeanController::class, 'update']);
     Route::delete('/{id}', [PaymentMeanController::class, 'destroy']);
 });
+
+
+
+
+
+/*
+|--------------------------------------------------------------------------
+| API Routes pour les Transactions
+|--------------------------------------------------------------------------
+*/
+
+use App\Http\Controllers\TransactionController;
+
+
+
+// Routes protégées par authentification
+Route::middleware('auth:api')->group(function () {
+    // Routes de transactions accessibles à tous les utilisateurs authentifiés
+    Route::prefix('transactions')->group(function () {
+        // Routes spécifiques (sans paramètres) - elles doivent être définies en premier
+        Route::get('/', [TransactionController::class, 'index']);
+        Route::get('/statistics', [TransactionController::class, 'myStatistics']);
+        Route::post('/deposit', [TransactionController::class, 'deposit']);
+        Route::post('/payment', [TransactionController::class, 'payment']);
+        Route::post('/delete-by-period', [TransactionController::class, 'softDeleteByPeriod']);
+        Route::post('/restore-by-period', [TransactionController::class, 'restoreByPeriod']);
+
+        // Route pour les transactions supprimées
+        Route::get('/trashedsimp', [TransactionController::class, 'trashed']);
+
+        // Export PDF - plus besoin du middleware admin car la vérification est dans le contrôleur
+        Route::get('/export-pdf', [TransactionController::class, 'exportPdf']);
+
+        // Routes avec paramètres - elles doivent être définies après les routes spécifiques
+        Route::get('/{transactionUid}/receipt', [TransactionController::class, 'receipt']);
+        Route::put('/{transactionUid}/cancel', [TransactionController::class, 'cancel']);
+        Route::put('/{transactionUid}/restore', [TransactionController::class, 'restore']);
+        Route::delete('/{transactionUid}', [TransactionController::class, 'softDelete']);
+
+        // Cette route doit être la dernière car elle est la plus générique
+        Route::get('/{transactionUid}', [TransactionController::class, 'show']);
+    });
+
+    // Routes admin - la vérification est maintenant dans le contrôleur,
+    Route::prefix('admin/transactions')->group(function () {
+        // Routes spécifiques admin
+        Route::get('/', [TransactionController::class, 'indexAdmin']);
+        Route::get('/statistics', [TransactionController::class, 'statistics']);
+        Route::get('/export', [TransactionController::class, 'export']);
+        Route::get('/daily-report/{date?}', [TransactionController::class, 'dailyReport']);
+        Route::get('/monthly-report/{month?}', [TransactionController::class, 'monthlyReport']);
+        Route::post('/force-delete-by-period', [TransactionController::class, 'forceDeleteByPeriod']);
+
+         // Route admin pour les transactions supprimées
+        Route::get('/trashed', [TransactionController::class, 'trashedAdmin']);
+
+        // Routes admin avec paramètres
+        Route::put('/{id}/status', [TransactionController::class, 'updateStatus']);
+        Route::delete('/{transactionUid}/force', [TransactionController::class, 'forceDelete']);
+
+        // Cette route doit être la dernière car elle est la plus générique
+        Route::get('/{id}', [TransactionController::class, 'showAdmin']);
+    });
+});

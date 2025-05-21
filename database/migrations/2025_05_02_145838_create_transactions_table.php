@@ -27,7 +27,7 @@ return new class extends Migration
             $table->text('description')->nullable(); // Description de la transaction
             $table->json('metadata')->nullable(); // Données supplémentaires au format JSON
             $table->timestamps(); // Création des colonnes created_at et updated_at
-            
+
             // Index pour améliorer les performances
             $table->index('transaction_date');
             $table->index(['user_id', 'transaction_date']);

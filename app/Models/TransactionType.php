@@ -32,6 +32,8 @@ class TransactionType extends Model
     protected $casts = [
         'is_credit' => 'boolean',
         'is_active' => 'boolean',
+        'deleted_at' => 'datetime', 
+
     ];
 
     /**

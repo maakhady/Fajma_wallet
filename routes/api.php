@@ -321,3 +321,23 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/{id}', [TransactionController::class, 'showAdmin']);
     });
 });
+
+
+/*
+|--------------------------------------------------------------------------
+| API Routes pour les Transactions
+|--------------------------------------------------------------------------
+*/
+
+use App\Http\Controllers\LogController;
+
+// Routes pour les logs - accessible uniquement aux administrateurs authentifiés
+Route::prefix('admin/logs')->middleware('auth:api')->group(function () {
+    Route::get('/', [LogController::class, 'index']);
+    Route::get('/actions', [LogController::class, 'getActions']);
+    Route::get('/entity-types', [LogController::class, 'getEntityTypes']);
+    Route::get('/users', [LogController::class, 'getUsers']);
+    Route::get('/{id}', [LogController::class, 'show']);
+    Route::delete('/{id}', [LogController::class, 'delete']);
+    Route::post('/purge', [LogController::class, 'purge']);
+});

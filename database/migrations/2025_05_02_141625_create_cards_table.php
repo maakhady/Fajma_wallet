@@ -20,10 +20,12 @@ return new class extends Migration
             $table->date('expires_at')->nullable(); // Date d'expiration de la carte
             $table->foreignId('user_id')->constrained(); // Convention Laravel standard (renommé de "users_id")
             $table->timestamps(); // pour created_at et updated_at
-            
+            $table->softDeletes(); // Ajout du soft delete
+
             // Index pour améliorer les performances
             $table->index('status');
             $table->index('user_id');
+            $table->index('deleted_at'); // Index pour les soft deletes
         });
     }
 

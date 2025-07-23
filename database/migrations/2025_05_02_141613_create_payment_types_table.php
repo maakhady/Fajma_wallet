@@ -20,6 +20,12 @@ return new class extends Migration
             $table->boolean('is_active')->default(true); // Type de paiement actif ou non
             $table->json('config')->nullable(); // Configuration spécifique au type de paiement
             $table->timestamps();
+            $table->softDeletes();
+
+            // Ajout d'index pour améliorer les performances des requêtes fréquentes
+            $table->index('deleted_at'); // Index pour les soft deletes
+// Ajout du soft delete
+
         });
     }
 

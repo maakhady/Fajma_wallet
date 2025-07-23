@@ -21,17 +21,19 @@ return new class extends Migration
             $table->string('profile_photo')->nullable();
             $table->string('password');
             $table->string('verification_code', 5); // Garder tel quel comme vous l'avez demandé
-            $table->enum('role', ['patient', 'admin', 'medecin','prestataire']);
+            $table->enum('role', ['patient', 'admin', 'medecin', 'prestataire']);
             $table->timestamp('email_verified_at')->nullable();
             $table->boolean('is_active')->default(true); // Ajout d'un statut d'activité
             $table->timestamp('last_login_at')->nullable(); // Suivre la dernière connexion
             $table->rememberToken();
             $table->timestamps(); // created_at, updated_at
+            $table->softDeletes(); // Ajout du soft delete dès la création
 
             // Ajout d'index pour améliorer les performances des requêtes fréquentes
             $table->index(['email', 'verification_code']);
             $table->index('contact_email');
             $table->index('role');
+            $table->index('deleted_at'); // Index pour les soft deletes
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

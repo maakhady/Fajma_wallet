@@ -27,12 +27,14 @@ return new class extends Migration
             $table->text('description')->nullable(); // Description de la transaction
             $table->json('metadata')->nullable(); // Données supplémentaires au format JSON
             $table->timestamps(); // Création des colonnes created_at et updated_at
+            $table->softDeletes(); // Ajout du soft delete
 
             // Index pour améliorer les performances
             $table->index('transaction_date');
             $table->index(['user_id', 'transaction_date']);
             $table->index(['card_id', 'transaction_date']);
             $table->index('payment_status_id');
+            $table->index('deleted_at'); // Index pour les soft deletes
         });
     }
 

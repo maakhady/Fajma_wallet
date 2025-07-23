@@ -24,10 +24,14 @@ return new class extends Migration
             $table->decimal('commission_rate', 5, 2)->default(0.00); // Taux de commission en pourcentage
             $table->foreignId('user_id')->nullable()->constrained(); // Lien vers l'utilisateur admin
             $table->timestamps(); // pour created_at et updated_at
-            
+            $table->softDeletes(); // Ajout du soft delete dès la création
+
+
             // Index pour améliorer les performances
             $table->index('provider_type');
             $table->index('status');
+            $table->index('deleted_at'); // Index pour les soft deletes
+
         });
     }
 

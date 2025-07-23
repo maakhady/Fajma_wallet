@@ -21,6 +21,7 @@ return new class extends Migration
             $table->boolean('is_credit')->default(false); // True si c'est un crédit, false si c'est un débit
             $table->boolean('is_active')->default(true); // Indique si ce type est actif
             $table->timestamps();
+            $table->softDeletes(); // Ajout du soft delete
         });
     }
 

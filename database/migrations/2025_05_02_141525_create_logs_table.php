@@ -22,11 +22,14 @@ return new class extends Migration
             $table->unsignedBigInteger('entity_id')->nullable(); // ID de l'entité concernée
             $table->json('metadata')->nullable(); // Données supplémentaires au format JSON
             $table->timestamps(); // created_at et updated_at
-            
+            $table->softDeletes(); // Ajout du soft delete pour la table des logs
+
             // Index pour améliorer les performances des requêtes
             $table->index('action');
             $table->index('created_at');
             $table->index(['entity_type', 'entity_id']);
+            $table->index('deleted_at'); // Index pour les soft deletes
+
         });
     }
 

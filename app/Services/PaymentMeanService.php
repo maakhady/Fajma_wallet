@@ -103,7 +103,14 @@ class PaymentMeanService
             }
 
             // Vérifier que l'utilisateur existe
-            $user = User::findOrFail($data['user_id']);
+            $user = User::findOrFail($data["user_id"]);
+
+            // Valider l'identifiant de compte si le type de paiement est Orange Money
+            if ($paymentType->name === 'orange_money') { // Assurez-vous que 'orange_money' est le nom correct du type de paiement
+                if (!$this->validateOrangeMoneyIdentifier($data['account_identifier'])) {
+                    throw new \Exception('L\'identifiant de compte Orange Money n\'est pas valide.');
+                }
+            }
 
             // Chiffrer l'identifiant du compte
             $data['account_identifier'] = Crypt::encryptString($data['account_identifier']);
@@ -159,8 +166,19 @@ class PaymentMeanService
             }
 
             // Chiffrer l'identifiant du compte s'il est modifié
-            if (isset($data['account_identifier'])) {
-                $data['account_identifier'] = Crypt::encryptString($data['account_identifier']);
+            if (isset($data["account_identifier"])) {
+                // Si le type de paiement est Orange Money, valider l'identifiant
+                $paymentType = $paymentMean->paymentType; // Utiliser le type de paiement existant ou le nouveau si modifié
+                if (isset($data["payment_type_id"]) && $data["payment_type_id"] != $paymentMean->payment_type_id) {
+                    $paymentType = PaymentType::findOrFail($data["payment_type_id"]);
+                }
+
+                if ($paymentType->name === 'orange_money') { // Assurez-vous que 'orange_money' est le nom correct du type de paiement
+                    if (!$this->validateOrangeMoneyIdentifier($data["account_identifier"])) {
+                        throw new \Exception('L\'identifiant de compte Orange Money n\'est pas valide.');
+                    }
+                }
+                $data["account_identifier"] = Crypt::encryptString($data["account_identifier"]);
             }
 
             // Si ce moyen de paiement devient le moyen par défaut
@@ -563,6 +581,23 @@ class PaymentMeanService
             ]);
         } catch (\Exception $e) {
             LogFacade::error('Erreur lors de la journalisation: ' . $e->getMessage());
-        }
+        
     }
+}
+
+
+
+    /**
+     * Valider l'identifiant de compte pour Orange Money (MSISDN).
+     *
+     * @param string $identifier
+     * @return bool
+     */
+    private function validateOrangeMoneyIdentifier(string $identifier): bool
+    {
+        // Regex pour les numéros de téléphone Orange Money au Sénégal (77, 78, 76, 70, 75)
+        // Adaptez cette regex si les formats de numéros sont différents ou si d'autres pays sont concernés.
+        return preg_match("/^(77|78|76|70|75)[0-9]{7}$/", $identifier);
+    }
+
 }

@@ -35,4 +35,23 @@ return [
         ],
     ],
 
+
+    'orange_money' => [
+    'merchant_id'   => env('ORANGE_MONEY_MERCHANT_ID'),
+    'merchant_name' => env('ORANGE_MONEY_MERCHANT_NAME'),
+    'api_key'       => env('ORANGE_MONEY_API_KEY'),
+    'api_secret'    => env('ORANGE_MONEY_API_SECRET'),
+    'environment'   => env('ORANGE_MONEY_ENVIRONMENT', 'sandbox'),
+],
+
+
+'wave' => [
+    'api_key' => env('WAVE_API_KEY'),
+    'base' => env('WAVE_API_BASE', 'https://api.wave.com'),
+    'success_url' => env('WAVE_SUCCESS_URL'),
+    'error_url' => env('WAVE_ERROR_URL'),
+    'webhook_secret' => env('WAVE_WEBHOOK_SECRET'),
+],
+
+
 ];

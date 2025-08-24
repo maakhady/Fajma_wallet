@@ -151,10 +151,11 @@ Route::prefix('payment-types')->group(function () {
     });
 });
 
+use App\Http\Controllers\WebhookController;
 
 // Routes pour les webhooks de paiement (sans authentification)
-// Route::post('/webhooks/wave', [WebhookController::class, 'handleWave'])->name('webhooks.wave');
-// Route::post('/webhooks/orange-money', [WebhookController::class, 'handleOrangeMoney'])->name('webhooks.orange_money');
+Route::post('/webhooks/wave', [WebhookController::class, 'handleWave'])->name('webhooks.wave');
+Route::post('/webhooks/orange-money', [WebhookController::class, 'handleOrangeMoney'])->name('webhooks.orange_money');
 
 
 /*
@@ -341,3 +342,15 @@ Route::prefix('admin/logs')->middleware('auth:api')->group(function () {
     Route::delete('/{id}', [LogController::class, 'delete']);
     Route::post('/purge', [LogController::class, 'purge']);
 });
+
+
+
+
+
+Route::get('/payment-success', function () {
+    return response()->json(['message' => 'Paiement réussi']);
+})->name('payment.success');
+
+Route::get('/payment-cancel', function () {
+    return response()->json(['message' => 'Paiement annulé']);
+})->name('payment.cancel');

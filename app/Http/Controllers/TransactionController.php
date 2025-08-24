@@ -229,17 +229,19 @@ class TransactionController extends Controller
             // Créer le dépôt via le service
             $result = $this->transactionService->processDeposit($data);
 
-            if (!$result['success']) {
+            if (!$result["success"]) {
                 return response()->json([
-                    'error' => $result['message'],
-                    'details' => $result['errors'] ?? null
+                    "error" => $result["message"],
+                    "details" => $result["errors"] ?? null
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
+            // Si le service a initié un Cash In asynchrone
+            // (Vous pouvez ajouter un indicateur dans $result si nécessaire, ex: $result["cash_in_initiated"])
             return response()->json([
-                'message' => 'Dépôt créé avec succès',
-                'transaction' => $result['transaction']
-            ], Response::HTTP_CREATED);
+                "message" => "Dépôt initié avec succès. En attente de confirmation.",
+                "transaction" => $result["transaction"]
+            ], Response::HTTP_ACCEPTED); // Ou HTTP_OK
         } catch (\Exception $e) {
             LogFacade::error('Erreur création dépôt: ' . $e->getMessage());
 
@@ -267,17 +269,27 @@ class TransactionController extends Controller
             // Créer le paiement via le service
             $result = $this->transactionService->processPayment($data);
 
-            if (!$result['success']) {
+            if (!$result["success"]) {
                 return response()->json([
-                    'error' => $result['message'],
-                    'details' => $result['errors'] ?? null
+                    "error" => $result["message"],
+                    "details" => $result["errors"] ?? null
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            return response()->json([
-                'message' => 'Paiement effectué avec succès',
-                'transaction' => $result['transaction']
-            ], Response::HTTP_CREATED);
+            // Si le service a retourné des données de QR Code, le paiement est en attente
+            if (isset($result["qr_code_data"])) {
+                return response()->json([
+                    "message" => "QR Code généré avec succès. Veuillez scanner le QR Code pour finaliser le paiement.",
+                    "transaction" => $result["transaction"],
+                    "qr_code_data" => $result["qr_code_data"]
+                ], Response::HTTP_ACCEPTED); // Ou HTTP_OK si vous préférez
+            } else {
+                // Cas où le paiement est immédiatement réussi (moins probable avec QR Code)
+                return response()->json([
+                    "message" => "Paiement effectué avec succès",
+                    "transaction" => $result["transaction"]
+                ], Response::HTTP_CREATED);
+            }
         } catch (\Exception $e) {
             LogFacade::error('Erreur création paiement: ' . $e->getMessage());
 

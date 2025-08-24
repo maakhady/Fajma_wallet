@@ -32,6 +32,7 @@ class CreatePaymentRequest extends FormRequest
             ],
             'amount' => 'required|numeric|min:100', // Montant minimum (ex: 100 FCFA)
             'provider_id' => 'required|integer|exists:providers,id,status,active',
+            'payment_mean_id' => 'required|integer|exists:payment_means,id,user_id,' . Auth::id(), // <-- AJOUTÉ
             'verification_code' => 'required|string|size:5',
             'description' => 'sometimes|string|max:255',
             'metadata' => 'sometimes|array',
@@ -49,6 +50,8 @@ class CreatePaymentRequest extends FormRequest
             'card_id.exists' => 'Cette carte ne vous appartient pas ou n\'existe pas',
             'amount.min' => 'Le montant minimum de paiement est de 100 FCFA',
             'provider_id.exists' => 'Ce prestataire n\'existe pas ou n\'est pas actif',
+            'payment_mean_id.required' => 'Le moyen de paiement est requis.', // <-- AJOUTÉ
+            'payment_mean_id.exists' => 'Le moyen de paiement sélectionné n\'existe pas ou ne vous appartient pas.', // <-- AJOUTÉ
             'verification_code.size' => 'Le code de vérification doit contenir exactement 5 caractères',
         ];
     }

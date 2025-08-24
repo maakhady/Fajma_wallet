@@ -386,126 +386,160 @@ public function forceDelete($id)
     }
 
     /**
-     * Configuration spécifique pour Wave
-     *
-     * @param ConfigureWaveRequest $request
-     * @return \Illuminate\Http\JsonResponse
+     * Configuration spécifique pour Wave (Checkout)
      */
     public function configureWave(ConfigureWaveRequest $request)
     {
         try {
             // Autorisé par middleware role:admin
-
-            // Configurer Wave en utilisant le service
             $data = $request->validated();
+
+            // Fallback .env si non fournis
+            $apiKey        = $data['api_key']        ?? env('WAVE_API_KEY');
+            $successUrl    = $data['success_url']    ?? env('WAVE_SUCCESS_URL');
+            $errorUrl      = $data['error_url']      ?? env('WAVE_ERROR_URL');
+            $webhookSecret = $data['webhook_secret'] ?? env('WAVE_WEBHOOK_SECRET'); // optionnel
+            $baseUrl       = rtrim($data['base_url'] ?? env('WAVE_API_BASE', 'https://api.wave.com'), '/');
+            $environment   = $data['environment']    ?? (app()->isProduction() ? 'production' : 'sandbox');
+
+            $newConfig = [
+                'api_key'        => $apiKey,
+                'base_url'       => $baseUrl,
+                'success_url'    => $successUrl,
+                'error_url'      => $errorUrl,
+                'webhook_url'    => route('webhooks.wave'), // ton endpoint serveur
+                'webhook_secret' => $webhookSecret,         // peut être null si pas de webhook
+                'environment'    => $environment,
+                'enabled_apis'   => [
+                    'checkout' => true,
+                    'balance'  => (bool)($data['enable_balance'] ?? env('WAVE_BALANCE_ENABLED', false)),
+                    'payout'   => (bool)($data['enable_payout']  ?? false),
+                ],
+            ];
 
             // Récupérer ou créer le type de paiement Wave
             $paymentType = $this->paymentTypeService->getPaymentTypeByName('wave');
 
             if (!$paymentType) {
-                // Créer le type de paiement Wave s'il n'existe pas
                 $paymentType = $this->paymentTypeService->createPaymentType([
-                    'name' => 'wave',
+                    'name'         => 'wave',
                     'display_name' => 'Wave',
-                    'description' => 'Paiement via Wave Money Transfer',
-                    'icon' => 'images/payment-types/wave.png',
-                    'is_active' => true,
-                    'config' => [
-                        'api_key' => $data['api_key'],
-                        'api_secret' => $data['api_secret'],
-                        'webhook_url' => route('webhooks.wave'),
-                        'merchant_id' => $data['merchant_id'],
-                        'environment' => $data['environment']
-                    ]
+                    'description'  => 'Paiement via Wave (Checkout)',
+                    'icon'         => 'images/payment-types/wave.png',
+                    'is_active'    => true,
+                    'config'       => $newConfig,
                 ]);
-
                 $message = 'Configuration Wave créée avec succès';
             } else {
-                // Mettre à jour la configuration
-                $config = $paymentType->config ?? [];
-                $config['api_key'] = $data['api_key'];
-                $config['api_secret'] = $data['api_secret'];
-                $config['webhook_url'] = route('webhooks.wave');
-                $config['merchant_id'] = $data['merchant_id'];
-                $config['environment'] = $data['environment'];
+                // merge + nettoyage anciens champs obsolètes
+                $merged = array_merge((array)($paymentType->config ?? []), $newConfig);
+                unset($merged['merchant_id'], $merged['api_secret']);
 
-                $paymentType = $this->paymentTypeService->updatePaymentTypeConfig($paymentType->id, $config);
-
+                $paymentType = $this->paymentTypeService->updatePaymentTypeConfig($paymentType->id, $merged);
                 $message = 'Configuration Wave mise à jour avec succès';
             }
 
             return response()->json([
                 'message' => $message,
-                'payment_type' => $paymentType
-            ]);
-        } catch (\Exception $e) {
-            LogFacade::error('Erreur configuration Wave: ' . $e->getMessage());
+                'payment_type' => $paymentType,
+            ], Response::HTTP_OK);
 
+        } catch (\Throwable $e) {
+            LogFacade::error('Erreur configuration Wave: ' . $e->getMessage());
             return response()->json([
-                'error' => 'Erreur lors de la configuration de Wave: ' . $e->getMessage()
+                'error' => 'Erreur lors de la configuration de Wave: ' . $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
+
 
     /**
-     * Configuration spécifique pour Orange Money
-     *
-     * @param ConfigureOrangeMoneyRequest $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function configureOrangeMoney(ConfigureOrangeMoneyRequest $request)
-    {
-        try {
-            // Autorisé par middleware role:admin
+ * Configuration spécifique pour Orange Money
+ */
+public function configureOrangeMoney(ConfigureOrangeMoneyRequest $request)
+{
+    try {
+        $data   = $request->validated();
+        $pt     = $this->paymentTypeService->getPaymentTypeByName('orange_money');
+        $isNew  = !$pt;
 
-            // Configurer Orange Money en utilisant le service
-            $data = $request->validated();
+        // Base URL de repli
+        $appUrl = rtrim(config('app.url'), '/');
 
-            // Récupérer ou créer le type de paiement Orange Money
-            $paymentType = $this->paymentTypeService->getPaymentTypeByName('orange_money');
-
-            if (!$paymentType) {
-                // Créer le type de paiement Orange Money s'il n'existe pas
-                $paymentType = $this->paymentTypeService->createPaymentType([
-                    'name' => 'orange_money',
-                    'display_name' => 'Orange Money',
-                    'description' => 'Paiement via Orange Money',
-                    'icon' => 'images/payment-types/orange-money.png',
-                    'is_active' => true,
-                    'config' => [
-                        'api_key' => $data['api_key'],
-                        'api_secret' => $data['api_secret'],
-                        'callback_url' => route('webhooks.orange_money'),
-                        'merchant_id' => $data['merchant_id'],
-                        'environment' => $data['environment']
-                    ]
-                ]);
-
-                $message = 'Configuration Orange Money créée avec succès';
-            } else {
-                // Mettre à jour la configuration
-                $config = $paymentType->config ?? [];
-                $config['api_key'] = $data['api_key'];
-                $config['api_secret'] = $data['api_secret'];
-                $config['callback_url'] = route('webhooks.orange_money');
-                $config['merchant_id'] = $data['merchant_id'];
-                $config['environment'] = $data['environment'];
-
-                $paymentType = $this->paymentTypeService->updatePaymentTypeConfig($paymentType->id, $config);
-
-                $message = 'Configuration Orange Money mise à jour avec succès';
+        // Routes nommées si dispo, sinon fallback
+        $returnUrl = (function () use ($data, $appUrl) {
+            if (function_exists('route') && app('router')->has('payment.success')) {
+                return route('payment.success');
             }
+            return $data['return_url'] ?? ($appUrl . '/payment/success');
+        })();
 
-            return response()->json([
-                'message' => $message,
-                'payment_type' => $paymentType
+        $cancelUrl = (function () use ($data, $appUrl) {
+            if (function_exists('route') && app('router')->has('payment.cancel')) {
+                return route('payment.cancel');
+            }
+            return $data['cancel_url'] ?? ($appUrl . '/payment/cancel');
+        })();
+
+        $notifUrl = (function () use ($data, $appUrl) {
+            if (function_exists('route') && app('router')->has('webhooks.orange_money')) {
+                return route('webhooks.orange_money');
+            }
+            return $data['notif_url'] ?? ($appUrl . '/api/webhooks/orange-money');
+        })();
+
+        // callback_url prioritaire, sinon on réutilise notifUrl
+        $callbackUrl = $data['callback_url'] ?? $notifUrl;
+
+        // Nouvelle config à enregistrer
+        $newCfg = [
+            'api_key'       => $data['api_key'],
+            'api_secret'    => $data['api_secret'],
+            'merchant_id'   => $data['merchant_id'],
+            'merchant_name' => $data['merchant_name'] ?? null,   // optionnel
+            'environment'   => $data['environment'],             // sandbox | production
+            'wallet_type'   => $data['wallet_type'] ?? 'MSISDN', // optionnel, défaut
+            'return_url'    => $returnUrl,
+            'cancel_url'    => $cancelUrl,
+            'notif_url'     => $notifUrl,
+            'callback_url'  => $callbackUrl,
+        ];
+
+        if ($isNew) {
+            // Création
+            $pt = $this->paymentTypeService->createPaymentType([
+                'name'         => 'orange_money',
+                'display_name' => 'Orange Money',
+                'description'  => 'Paiement via Orange Money',
+                'icon'         => 'images/payment-types/orange-money.png',
+                'is_active'    => true,
+                'config'       => $newCfg,
             ]);
-        } catch (\Exception $e) {
-            LogFacade::error('Erreur configuration Orange Money: ' . $e->getMessage());
 
             return response()->json([
-                'error' => 'Erreur lors de la configuration d\'Orange Money: ' . $e->getMessage()
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+                'message'      => 'Configuration Orange Money créée avec succès',
+                'payment_type' => $pt,
+            ], 201); // ✅ 201 Created
         }
+
+        // Mise à jour (merge pour conserver d’éventuels anciens champs)
+        $config = $pt->config ?? [];
+        $config = array_merge($config, $newCfg);
+        $pt     = $this->paymentTypeService->updatePaymentTypeConfig($pt->id, $config);
+
+        return response()->json([
+            'message'      => 'Configuration Orange Money mise à jour avec succès',
+            'payment_type' => $pt,
+        ], 200);
+
+    } catch (\Throwable $e) {
+        LogFacade::error('Erreur configuration Orange Money: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        return response()->json([
+            'error' => 'Erreur lors de la configuration d\'Orange Money',
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
     }
 }
+}
+
+
+

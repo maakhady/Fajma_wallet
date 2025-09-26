@@ -9,6 +9,8 @@ use App\Services\ProviderService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log as LogFacade;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Facades\Storage;
+
 
 class ProviderController extends Controller
 {
@@ -48,6 +50,34 @@ class ProviderController extends Controller
                 $providers = $this->providerService->getProvidersByType($type);
             } else {
                 $providers = $this->providerService->getActiveProviders();
+            }
+
+            return response()->json([
+                'providers' => $providers
+            ]);
+        } catch (\Exception $e) {
+            LogFacade::error('Erreur récupération prestataires: ' . $e->getMessage());
+
+            return response()->json([
+                'error' => 'Erreur lors de la récupération des prestataires'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Afficher la liste des prestataires Inactifs
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function prestaInactifs(Request $request)
+    {
+        try {
+            $type = $request->query('type');
+
+            if ($type) {
+                $providers = $this->providerService->getProvidersByType($type);
+            } else {
+                $providers = $this->providerService->getInactifsProviders();
             }
 
             return response()->json([
@@ -159,29 +189,57 @@ class ProviderController extends Controller
         }
     }
 
-    /**
-     * Créer un nouveau prestataire
-     *
-     * @param CreateProviderRequest $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function store(CreateProviderRequest $request)
-    {
-        try {
-            $provider = $this->providerService->createProvider($request->validated());
+{
+    try {
+        $data = $request->safe()->except(['logo', 'logo_base64']);
 
-            return response()->json([
-                'message' => 'Prestataire créé avec succès',
-                'provider' => $provider
-            ], Response::HTTP_CREATED);
-        } catch (\Exception $e) {
-            LogFacade::error('Erreur création prestataire: ' . $e->getMessage());
-
-            return response()->json([
-                'error' => 'Erreur lors de la création du prestataire: ' . $e->getMessage()
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        // 1) FICHIER uploadé (multipart/form-data)
+        if ($request->hasFile('logo')) {
+            $path = $request->file('logo')->store('providers/logos', 'public');
+            $data['logo'] = Storage::disk('public')->url($path);
         }
+        // 2) OU base64
+        elseif ($request->filled('logo_base64')) {
+            $data['logo'] = $this->saveBase64Image(
+                $request->input('logo_base64'),
+                'providers/logos'
+            );
+        }
+
+        $provider = $this->providerService->createProvider($data);
+
+        return response()->json([
+            'message'  => 'Prestataire créé avec succès',
+            'provider' => $provider
+        ], Response::HTTP_CREATED);
+
+    } catch (\Throwable $e) {
+        \Log::error('Erreur création prestataire: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+
+        return response()->json([
+            'error' => 'Erreur lors de la création du prestataire'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
     }
+}
+
+// Méthode privée pour stocker une image base64
+private function saveBase64Image(string $base64, string $dir): string
+{
+    // data:image/png;base64,XXXX
+    [$meta, $content] = explode(',', $base64, 2);
+    // extension
+    preg_match('/^data:image\/(?<ext>png|jpe?g|gif|svg\+xml|webp);base64$/', $meta, $m);
+    $ext = $m['ext'] ?? 'png';
+    if ($ext === 'svg+xml') $ext = 'svg';
+
+    $binary = base64_decode($content);
+    $filename = $dir.'/'.uniqid('logo_', true).'.'.$ext;
+
+    Storage::disk('public')->put($filename, $binary);
+
+    return Storage::disk('public')->url($filename);
+}
 
     /**
      * Mettre à jour un prestataire existant

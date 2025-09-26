@@ -171,6 +171,7 @@ use App\Http\Controllers\ProviderController;
 Route::prefix('providers')->group(function () {
     // Routes publiques (pour récupérer la liste des prestataires actifs)
     Route::get('/', [ProviderController::class, 'index']);
+    Route::get('/inactifs', [ProviderController::class, 'prestaInactifs']);
     Route::get('/health', [ProviderController::class, 'getHealthProviders']);
     Route::get('/financial', [ProviderController::class, 'getFinancialServices']);
     Route::get('/{id}', [ProviderController::class, 'show'])->where('id', '[0-9]+');

@@ -41,6 +41,22 @@ class ProviderService
     }
 
     /**
+     * Récupérer uniquement les prestataires inactifs
+     *
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+
+     public function getInactifsProviders()
+    {
+        try {
+            return Provider::where('status', 'inactive')->get();
+        } catch (\Exception $e) {
+            LogFacade::error('Erreur lors de la récupération des prestataires inactifs: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
      * Récupérer les prestataires par type
      *
      * @param string $type
@@ -79,26 +95,24 @@ class ProviderService
      * @return Provider
      */
     public function createProvider(array $data)
-    {
-        try {
-            // Traiter le logo si fourni
-            if (isset($data['logo']) && $data['logo']) {
-                $logoPath = $this->storeLogo($data['logo']);
-                $data['logo'] = $logoPath;
-            }
+{
+    try {
+        // AUCUN retravail du logo ici
+        $provider = Provider::create($data);
 
-            // Créer le prestataire
-            $provider = Provider::create($data);
+        $this->logAction(
+            'create_provider',
+            $provider->id,
+            'Création du prestataire: '.$provider->structure_name
+        );
 
-            // Journaliser la création
-            $this->logAction('create_provider', $provider->id, 'Création du prestataire: ' . $provider->structure_name);
-
-            return $provider;
-        } catch (\Exception $e) {
-            LogFacade::error('Erreur lors de la création du prestataire: ' . $e->getMessage());
-            throw $e;
-        }
+        return $provider;
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur lors de la création du prestataire: '.$e->getMessage());
+        throw $e;
     }
+}
+
 
     /**
      * Mettre à jour un prestataire existant
@@ -148,9 +162,9 @@ class ProviderService
             $provider = $this->getProviderById($id);
 
             // Vérifier si le prestataire a des transactions
-            if ($provider->transactions()->count() > 0) {
-                throw new \Exception('Ce prestataire est associé à des transactions et ne peut pas être supprimé.');
-            }
+            // if ($provider->transactions()->count() > 0) {
+            //     throw new \Exception('Ce prestataire est associé à des transactions et ne peut pas être supprimé.');
+            // }
 
             // Journaliser la suppression avant de supprimer
             $this->logAction('delete_provider', $provider->id, 'Suppression du prestataire: ' . $provider->structure_name);
@@ -162,6 +176,9 @@ class ProviderService
             throw $e;
         }
     }
+
+
+
 
     /**
      * Activer un prestataire

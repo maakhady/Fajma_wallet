@@ -135,7 +135,7 @@
 
     <div class="footer">
         <p>Ce reçu est généré automatiquement et ne nécessite pas de signature.</p>
-        <p>FAJMA Health Wallet - Solution de paiement pour la santé</p>
+        <p>FAJMA Wallet - Solution de paiement pour la santé</p>
     </div>
 </body>
 </html>

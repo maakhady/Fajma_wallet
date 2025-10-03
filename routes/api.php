@@ -94,6 +94,8 @@ Route::group(['middleware' => ['auth:api'], 'prefix' => 'users'], function () {
     Route::put('/profile', [UserController::class, 'updateProfile']); // Mettre cette route en premier
     Route::post('/change-password', [UserController::class, 'changePassword']);
     Route::get('/archived', [UserController::class, 'trashed']); // Liste des utilisateurs archivés
+    Route::get('/anonymized', [UserController::class, 'getAnonymizedUsers']);
+    Route::get('/anonymized/{id}', [UserController::class, 'getAnonymizedUserDetails']);
 
 
     // Routes accessibles uniquement par l'admin
@@ -103,6 +105,8 @@ Route::group(['middleware' => ['auth:api'], 'prefix' => 'users'], function () {
     Route::patch('/{id}/toggle-active', [UserController::class, 'toggleActive']);
     Route::patch('/{id}/change-role', [UserController::class, 'changeRole']);
     Route::post('/{id}/reset-password', [UserController::class, 'resetPassword']);
+    Route::delete('/{id}/force', [UserController::class, 'forceDelete'])->middleware('throttle:3,1');
+    
 
     // Routes standard
     Route::delete('/{id}', [UserController::class, 'destroy']); // Archiver un utilisateur (soft delete)
@@ -289,8 +293,7 @@ Route::middleware('auth:api')->group(function () {
         // Route pour les transactions supprimées
         Route::get('/trashedsimp', [TransactionController::class, 'trashed']);
 
-        // Export PDF - plus besoin du middleware admin car la vérification est dans le contrôleur
-        Route::get('/export-pdf', [TransactionController::class, 'exportPdf']);
+        
 
         // Routes avec paramètres - elles doivent être définies après les routes spécifiques
         Route::get('/{transactionUid}/receipt', [TransactionController::class, 'receipt']);

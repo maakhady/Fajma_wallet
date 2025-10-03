@@ -54,7 +54,7 @@ class CreatePaymentRequest extends FormRequest
             'payment_mean_id.exists' => 'Le moyen de paiement sélectionné n\'existe pas ou ne vous appartient pas.', // <-- AJOUTÉ
             'verification_code.size' => 'Le code de vérification doit contenir exactement 5 caractères',
         ];
-    }
+    } 
 
     /**
      * Prepare the data for validation.

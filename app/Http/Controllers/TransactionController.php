@@ -6,10 +6,8 @@ use App\Http\Requests\Transaction\CreateDepositRequest;
 use App\Http\Requests\Transaction\CreatePaymentRequest;
 use App\Http\Requests\Transaction\ListTransactionRequest;
 use App\Http\Requests\Transaction\UpdateStatusRequest;
-use App\Models\Log;
 use App\Services\TransactionService;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log as LogFacade;
@@ -19,7 +17,7 @@ class TransactionController extends Controller
 {
     protected $transactionService;
 
-   /**
+    /**
      * Constructeur avec injection du service et middleware d'authentification
      *
      * @param TransactionService $transactionService
@@ -466,58 +464,29 @@ class TransactionController extends Controller
  * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
  */
 public function export(Request $request)
-{
-    // Vérification des droits administrateur
-    $adminCheck = $this->checkAdmin();
-    if ($adminCheck) return $adminCheck;
+    {
+        // 1. Vérification des droits (votre code ici)
+        // $this->authorize('export', Transaction::class);
 
-    try {
-        $format = $request->input('format', 'csv');
-        $filters = $request->except(['format']);
+        try {
+            // 2. Récupération des paramètres
+            $format = $request->input('format', 'csv');
+            $filters = $request->except(['format']);
 
-        // Exporter les transactions via le service
-        $export = $this->transactionService->exportTransactions($filters, $format);
+            // 3. Appel UNIQUE au service
+            // ✨ Le contrôleur ne se soucie plus du format, il demande juste l'export.
+            return $this->transactionService->exportTransactions($filters, $format);
 
-        if (!isset($export['success']) || !$export['success']) {
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de l\'export des transactions: ' . $e->getMessage());
+
+            // Retourner une erreur JSON claire pour le frontend
             return response()->json([
-                'error' => $export['message'] ?? 'Erreur lors de l\'export'
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                'message' => 'Une erreur interne est survenue lors de la génération du fichier.',
+                'error' => $e->getMessage() // Optionnel, pour le debug en dev
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
-
-        if ($format === 'csv') {
-            return response($export['content'])
-                ->header('Content-Type', 'text/csv')
-                ->header('Content-Disposition', 'attachment; filename="transactions-export-' . date('Y-m-d') . '.csv"');
-        } else if ($format === 'excel' && isset($export['excel'])) {
-            // Télécharger le fichier Excel
-            return response()->download(
-                $export['excel']['path'],
-                $export['excel']['filename'],
-                ['Content-Type' => $export['excel']['mime']]
-            )->deleteFileAfterSend(true); // Supprimer le fichier temporaire après envoi
-        } else if ($format === 'excel' && isset($export['content'])) {
-            // Fallback au CSV si l'Excel a échoué
-            return response($export['content'])
-                ->header('Content-Type', 'text/csv')
-                ->header('Content-Disposition', 'attachment; filename="transactions-export-' . date('Y-m-d') . '.csv"');
-        } else if ($format === 'pdf') {
-            // Pour l'instant, renvoyer CSV aussi pour PDF
-            return response($export['content'])
-                ->header('Content-Type', 'text/csv')
-                ->header('Content-Disposition', 'attachment; filename="transactions-export-' . date('Y-m-d') . '.csv"');
-        }
-
-        return response()->json([
-            'error' => 'Format d\'export non pris en charge'
-        ], Response::HTTP_UNPROCESSABLE_ENTITY);
-    } catch (\Exception $e) {
-        LogFacade::error('Erreur export transactions: ' . $e->getMessage());
-
-        return response()->json([
-            'error' => 'Erreur lors de l\'export des transactions: ' . $e->getMessage()
-        ], Response::HTTP_INTERNAL_SERVER_ERROR);
     }
-}
 
     /**
      * Récupérer le rapport quotidien des transactions (Admin uniquement)
@@ -583,48 +552,7 @@ public function export(Request $request)
         }
     }
 
-    /**
-     * Exporter les transactions au format PDF (Admin uniquement)
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
-     */
-    public function exportPdf(Request $request)
-    {
-        // Vérification des droits administrateur
-        $adminCheck = $this->checkAdmin();
-        if ($adminCheck) return $adminCheck;
-
-        try {
-            $filters = $request->all();
-
-            // Déléguer l'export au service
-            $result = $this->transactionService->exportTransactionsPdf($filters);
-
-            if (!$result['success']) {
-                return response()->json([
-                    'error' => $result['message']
-                ], Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
-
-            // Journaliser l'action
-            Log::create([
-                'user_id' => Auth::id(),
-                'action' => 'export_transactions_pdf',
-                'description' => 'Export PDF de ' . ($result['count'] ?? 0) . ' transactions'
-            ]);
-
-            // Retourner le PDF
-            return $result['pdf']->download('transactions-' . now()->format('Y-m-d-His') . '.pdf');
-        } catch (\Exception $e) {
-            LogFacade::error('Erreur export PDF: ' . $e->getMessage());
-
-            return response()->json([
-                'error' => 'Erreur lors de l\'export PDF des transactions: ' . $e->getMessage()
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
-
+   
     /**
      * Suppression logique d'une transaction
      *

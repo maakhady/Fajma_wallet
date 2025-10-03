@@ -288,160 +288,12 @@ class TransactionService
 }
 
 
-//   public function processPayment(array $data)
-// {
-//     try {
-//         DB::beginTransaction();
-
-//         // 1) Vérifs de base
-//         $card = Card::where('id', $data['card_id'])
-//             ->where('user_id', $data['user_id'])
-//             ->first();
-//         if (!$card) return ['success' => false, 'message' => 'Carte introuvable'];
-//         if ($card->status !== 'activated') return ['success' => false, 'message' => 'Carte inactive'];
-
-//         $user = User::find($data['user_id']);
-//         if (!$user) return ['success' => false, 'message' => 'Utilisateur introuvable'];
-
-//         if ($user->verification_code !== ($data['verification_code'] ?? null)) {
-//             return ['success' => false, 'message' => 'Code de vérification incorrect'];
-//         }
-
-//         $provider = Provider::where('id', $data['provider_id'])
-//             ->where('status', 'active')
-//             ->first();
-//         if (!$provider) return ['success' => false, 'message' => 'Prestataire introuvable ou inactif'];
-
-//         if ($card->balance < $data['amount']) {
-//             return ['success' => false, 'message' => 'Solde insuffisant'];
-//         }
-
-//         $transactionType = TransactionType::where('name', 'payment')->first();
-//         $pendingStatus   = PaymentStatus::where('name', 'pending')->first();
-//         if (!$transactionType || !$pendingStatus) {
-//             return ['success' => false, 'message' => 'Type ou statut de transaction introuvable'];
-//         }
-
-//         $paymentMean = PaymentMean::where('id', $data['payment_mean_id'])
-//             ->where('user_id', $data['user_id'])
-//             ->first();
-//         if (!$paymentMean) return ['success' => false, 'message' => 'Moyen de paiement introuvable'];
-
-//         $provider = strtolower($paymentMean->paymentType->name ?? '');
-//         // 2) Transaction en pending
-//         $transaction = new Transaction([
-//             'card_id'             => $card->id,
-//             'user_id'             => $data['user_id'],
-//             'amount'              => (int) $data['amount'],
-//             'transaction_date'    => now(),
-//             'transaction_type_id' => $transactionType->id,
-//             'payment_mean_id'     => $paymentMean->id,
-//             'provider_id'         => $provider->id,
-//             'payment_status_id'   => $pendingStatus->id,
-//             'previous_balance'    => $card->balance,
-//             'current_balance'     => $card->balance,
-//             'transaction_uid'     => Str::uuid(),
-//             'description'         => $data['description'] ?? 'Paiement santé',
-//             'metadata'            => $data['metadata'] ?? null,
-//         ]);
-//         $transaction->save();
-
-//         // 3) Traitement par provider
-//         if ($providerCode === 'wave') {
-//             /** @var \App\Services\WaveService $wave */
-//             $wave = app(\App\Services\WaveService::class);
-//             $checkout = $wave->createCheckoutSession(
-//                 $data['amount'],
-//                 $transaction->transaction_uid
-//             );
-
-//             $meta = (array)($transaction->metadata ?? []);
-//             $meta['wave'] = [
-//                 'checkout_id'     => $checkout['id'] ?? null,
-//                 'transaction_id'  => $checkout['transaction_id'] ?? null,
-//                 'wave_launch_url' => $checkout['wave_launch_url'] ?? null,
-//                 'when_expires'    => $checkout['when_expires'] ?? null,
-//             ];
-//             $transaction->metadata = $meta;
-//             $transaction->save();
-
-//             DB::commit();
-
-//             return [
-//                 'success'      => true,
-//                 'provider'     => 'wave',
-//                 'status'       => 'pending',
-//                 'redirect_url' => $checkout['wave_launch_url'] ?? null,
-//                 'transaction'  => $transaction->load(['transactionType', 'paymentStatus', 'card', 'provider']),
-//                 'message'      => 'Paiement Wave initié. Redirigez l’utilisateur vers redirect_url.',
-//             ];
-//         }
-
-//         if (in_array($providerCode, ['orange_money', 'om', 'orangemoney'])) {
-//             // Normalisation MSISDN
-//             $rawMsisdn = $paymentMean->msisdn ?? $paymentMean->phone ?? $user->phone ?? $card->phone;
-//             $msisdn    = $rawMsisdn ? preg_replace('/\D/', '', $rawMsisdn) : null;
-//             if ($msisdn && strlen($msisdn) === 9 && preg_match('/^(70|75|76|77|78)\d{7}$/', $msisdn)) {
-//                 $msisdn = '221' . $msisdn;
-//             }
-//             if (!$msisdn || !(strlen($msisdn) === 12 && str_starts_with($msisdn, '221'))) {
-//                 return ['success' => false, 'message' => 'MSISDN invalide: format attendu 221XXXXXXXXX.'];
-//             }
-
-//             $orangeMoneyService = new OrangeMoneyService();
-//             $omPaymentData = [
-//                 'amount'      => (int) $data['amount'],
-//                 'customer_id' => $msisdn,
-//                 'metadata'    => [
-//                     'order_id'    => (string) $transaction->transaction_uid,
-//                     'reference'   => (string) $transaction->id,
-//                     'description' => $data['description'] ?? 'Paiement santé',
-//                 ],
-//                 'code'     => $orangeMoneyService->config['merchant_id'],
-//                 'name'     => $orangeMoneyService->config['merchant_name'] ?? 'Default Merchant Name',
-//                 'validity' => 86400,
-//             ];
-
-//             $apiResponse = $orangeMoneyService->initiatePayment($omPaymentData);
-
-//             if (isset($apiResponse['qrCode']) || isset($apiResponse['deeplink'])) {
-//                 $transaction->metadata = array_merge((array) $transaction->metadata, ['om_response' => $apiResponse]);
-//                 $transaction->save();
-//                 DB::commit();
-
-//                 return [
-//                     'success'      => true,
-//                     'provider'     => 'orange_money',
-//                     'status'       => 'pending',
-//                     'transaction'  => $transaction->load(['transactionType', 'paymentStatus', 'card', 'provider']),
-//                     'qr_code_data' => $apiResponse,
-//                 ];
-//             }
-
-//             // Sinon échec
-//             if ($failed = PaymentStatus::where('name', 'failed')->first()) {
-//                 $transaction->payment_status_id = $failed->id;
-//                 $transaction->save();
-//             }
-//             DB::commit();
-//             return ['success' => false, 'message' => 'Échec de la génération du QR Code Orange Money.', 'errors' => $apiResponse];
-//         }
-
-//         // Provider non supporté
-//         DB::rollBack();
-//         return ['success' => false, 'message' => 'Provider de paiement non supporté'];
-
-//     } catch (\Throwable $e) {
-//         DB::rollBack();
-//         LogFacade::error('Erreur processPayment: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-//         return [
-//             'success' => false,
-//             'message' => 'Une erreur est survenue lors du traitement du paiement',
-//             'errors'  => ['exception' => $e->getMessage()],
-//         ];
-//     }
-// }
-
+    /**
+     * Traiter un paiement
+     *
+     * @param array $data
+     * @return array
+     */
 public function processPayment(array $data): array
     {
         DB::beginTransaction();
@@ -754,7 +606,7 @@ public function processPayment(array $data): array
                 ]
             ];
         }
-    
+
     }
 
 
@@ -883,69 +735,153 @@ public function processPayment(array $data): array
         return $query;
     }
 
-    /**
-     * Exporter les transactions en PDF
+
+     /**
+     * Orchestre l'exportation des transactions dans le format demandé.
      *
      * @param array $filters
-     * @return string Chemin du fichier PDF généré
+     * @param string $format
+     * @return \Symfony\Component\HttpFoundation\Response
      */
-    public function exportTransactionsPdf(array $filters = [])
+    public function exportTransactions(array $filters = [], string $format = 'csv')
     {
-        $transactions = $this->applyFilters(Transaction::with(['user', 'card', 'transactionType', 'provider', 'paymentMean', 'paymentStatus']), $filters)->get();
-        $pdf = Pdf::loadView('exports.transactions_pdf', compact('transactions'));
-        $filename = 'transactions_' . Carbon::now()->format('Ymd_His') . '.pdf';
-        $path = storage_path('app/public/' . $filename);
-        $pdf->save($path);
-        return $path;
+        // ✨ Le switch dirige vers la bonne méthode privée
+        switch ($format) {
+            case 'excel':
+                return $this->generateExcelResponse($filters);
+            case 'pdf':
+                return $this->generatePdfResponse($filters);
+            case 'csv':
+            default:
+                return $this->generateCsvResponse($filters);
+        }
     }
 
+
     /**
-     * Exporter les transactions en Excel (XLSX)
+     * Génère une réponse de téléchargement pour un fichier Excel (XLSX).
      *
      * @param array $filters
-     * @return string Chemin du fichier Excel généré
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
      */
-    public function exportTransactionsExcel(array $filters = [])
+    private function generateExcelResponse(array $filters)
     {
         $transactions = $this->applyFilters(Transaction::with(['user', 'card', 'transactionType', 'provider', 'paymentMean', 'paymentStatus']), $filters)->get();
+
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setCellValue('A1', 'ID');
-        $sheet->setCellValue('B1', 'UID Transaction');
-        $sheet->setCellValue('C1', 'Utilisateur');
-        $sheet->setCellValue('D1', 'Carte');
-        $sheet->setCellValue('E1', 'Montant');
-        $sheet->setCellValue('F1', 'Date Transaction');
-        $sheet->setCellValue('G1', 'Type Transaction');
-        $sheet->setCellValue('H1', 'Prestataire');
-        $sheet->setCellValue('I1', 'Moyen Paiement');
-        $sheet->setCellValue('J1', 'Statut Paiement');
-        $sheet->setCellValue('K1', 'Solde Avant');
-        $sheet->setCellValue('L1', 'Solde Après');
-        $sheet->setCellValue('M1', 'Description');
+
+        // En-têtes
+        $headers = ['ID', 'UID Transaction', 'Utilisateur', 'Carte', 'Montant', 'Date Transaction', 'Type', 'Prestataire', 'Moyen Paiement', 'Statut', 'Solde Avant', 'Solde Après', 'Description'];
+        $sheet->fromArray($headers, null, 'A1');
+
         $row = 2;
         foreach ($transactions as $transaction) {
-            $sheet->setCellValue('A' . $row, $transaction->id);
-            $sheet->setCellValue('B' . $row, $transaction->transaction_uid);
-            $sheet->setCellValue('C' . $row, $transaction->user->first_name . ' ' . $transaction->user->last_name);
-            $sheet->setCellValue('D' . $row, $transaction->card->card_number);
-            $sheet->setCellValue('E' . $row, $transaction->amount);
-            $sheet->setCellValue('F' . $row, $transaction->transaction_date->format('Y-m-d H:i:s'));
-            $sheet->setCellValue('G' . $row, $transaction->transactionType->display_name);
-            $sheet->setCellValue('H' . $row, $transaction->provider ? $transaction->provider->structure_name : 'N/A');
-            $sheet->setCellValue('I' . $row, $transaction->paymentMean ? $transaction->paymentMean->paymentType->display_name . ' (' . $this->maskAccountIdentifier($transaction->paymentMean->account_identifier) . ')' : 'N/A');
-            $sheet->setCellValue('J' . $row, $transaction->paymentStatus->display_name);
-            $sheet->setCellValue('K' . $row, $transaction->previous_balance);
-            $sheet->setCellValue('L' . $row, $transaction->current_balance);
-            $sheet->setCellValue('M' . $row, $transaction->description);
+            // ✅ Utilisation de l'opérateur "nullsafe" (PHP 8+) pour éviter les erreurs
+            $data = [
+                $transaction->id,
+                $transaction->transaction_uid,
+                $transaction->user?->first_name . ' ' . $transaction->user?->last_name,
+                $transaction->card?->card_number,
+                $transaction->amount,
+                $transaction->transaction_date?->format('Y-m-d H:i:s'),
+                $transaction->transactionType?->display_name,
+                $transaction->provider?->structure_name ?? 'N/A',
+                $transaction->paymentMean?->paymentType?->display_name . ' (' . $this->maskAccountIdentifier($transaction->paymentMean?->account_identifier) . ')',
+                $transaction->paymentStatus?->display_name,
+                $transaction->previous_balance,
+                $transaction->current_balance,
+                $transaction->description
+            ];
+            $sheet->fromArray($data, null, 'A' . $row);
             $row++;
         }
+
         $filename = 'transactions_' . Carbon::now()->format('Ymd_His') . '.xlsx';
-        $path = storage_path('app/public/' . $filename);
+        $path = storage_path('app/temp/' . $filename); // Utiliser un dossier temporaire
+
         $writer = new Xlsx($spreadsheet);
         $writer->save($path);
-        return $path;
+
+        // ✅ Le service retourne directement la réponse de téléchargement
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
     }
+
+
+
+    /**
+ * Génère une réponse de téléchargement pour un fichier PDF.
+ *
+ * @param array $filters
+ * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+ */
+private function generatePdfResponse(array $filters)
+{
+    $transactions = $this->applyFilters(Transaction::with(['user', 'transactionType', 'paymentStatus']), $filters)->get();
+
+    // ✅ Préparation de TOUTES les données pour la vue
+    $data = [
+        'title' => 'Rapport de Transactions',
+        'subtitle' => 'Généré le ' . now()->format('d/m/Y H:i'),
+        'data' => $transactions, // La vue utilise la variable 'data'
+        'total_count' => $transactions->count(),
+        'total_amount' => $transactions->sum('amount')
+    ];
+
+    // On passe le tableau $data complet à la vue
+    $pdf = Pdf::loadView('exports.transactions_pdf', $data);
+
+    $filename = 'rapport_transactions_' . Carbon::now()->format('Ymd_His') . '.pdf';
+    $path = storage_path('app/temp/' . $filename);
+
+    $pdf->save($path);
+
+    return response()->download($path, $filename)->deleteFileAfterSend(true);
+}
+
+     /**
+     * Génère une réponse streamée pour un export CSV.
+     * C'est plus efficace car ça n'écrit pas de fichier sur le disque.
+     *
+     * @param array $filters
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     */
+    private function generateCsvResponse(array $filters)
+    {
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="transactions_'.Carbon::now()->format('Ymd_His').'.csv"',
+        ];
+
+        $callback = function() use ($filters) {
+            $file = fopen('php://output', 'w');
+
+            // En-têtes
+            $columns = ['ID', 'UID Transaction', 'Utilisateur', 'Carte', 'Montant', 'Date', 'Type', 'Statut', 'Description'];
+            fputcsv($file, $columns);
+
+            $transactions = $this->applyFilters(Transaction::with(['user', 'card', 'transactionType', 'paymentStatus']), $filters)->get();
+
+            foreach ($transactions as $transaction) {
+                fputcsv($file, [
+                    $transaction->id,
+                    $transaction->transaction_uid,
+                    $transaction->user?->first_name . ' ' . $transaction->user?->last_name,
+                    $transaction->card?->card_number,
+                    $transaction->amount,
+                    $transaction->transaction_date?->format('Y-m-d H:i:s'),
+                    $transaction->transactionType?->display_name,
+                    $transaction->paymentStatus?->display_name,
+                    $transaction->description
+                ]);
+            }
+            fclose($file);
+        };
+
+        // ✅ Le service retourne directement la réponse de streaming
+        return response()->stream($callback, 200, $headers);
+    }
+
 
     /**
      * Masquer l'identifiant de compte pour l'affichage
@@ -1101,10 +1037,11 @@ public function processPayment(array $data): array
             $data = [
                 'transaction' => $transaction,
                 'date' => Carbon::parse($transaction->transaction_date)->format('d/m/Y H:i'),
-                'company_name' => 'FAJMA Health Wallet',
+                'company_name' => 'FAJMA WALLET',
                 'company_address' => 'Dakar, Sénégal',
-                'company_phone' => '+221 XX XXX XX XX',
+                'company_phone' => '+221 78 305 78 78',
                 'company_email' => 'contact@fajma.sn',
+                'company_site' => 'https://www.fajma.com/',
                 'receipt_date' => now()->format('d/m/Y H:i'),
                 'receipt_number' => 'FAJMA-' . str_pad($transaction->id, 8, '0', STR_PAD_LEFT),
             ];

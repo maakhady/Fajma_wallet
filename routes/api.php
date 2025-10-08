@@ -44,40 +44,122 @@ Route::middleware('auth:api')->prefix('auth')->group(function () {
 */
 
 
-//CARTE
 use App\Http\Controllers\CardController;
 
-// Routes pour la gestion des cartes (protégées par auth:api)
+// ============================================
+// ROUTES CARTES - GESTION COMPLÈTE
+// ============================================
+
 Route::middleware('auth:api')->prefix('cards')->group(function () {
-    // Récupérer toutes les cartes de l'utilisateur connecté
+    
+    // ------------------------------------------
+    // CONSULTATION DES CARTES (routes spécifiques EN PREMIER)
+    // ------------------------------------------
+    
+    // Récupérer toutes les cartes du système (ADMIN UNIQUEMENT)
     Route::get('/', [CardController::class, 'index']);
-    // pour récupérer la carte de l'utilisateur connecté
+    
+    // Récupérer les cartes de l'utilisateur connecté
     Route::get('/user', [CardController::class, 'getUserCards']);
-     // Vérifier l'accès à une carte via le code de vérification
-     Route::post('/verifycode', [CardController::class, 'verifyAccess']);
-     //Pour connaitre son solde
-     Route::get('/balance', [CardController::class, 'getUserCardBalance']); // route pour le solde
-
-    // Bloquer une carte pour des raisons de sécurité/fraude par l'utilisateur
-    Route::post('/block-security', [CardController::class, 'blockUserCardForSecurity']);
-
+    
+    // Récupérer les cartes archivées (ADMIN UNIQUEMENT)
+    Route::get('/archived', [CardController::class, 'getArchivedCards']);
+    
+    // Lister toutes les cartes expirées (ADMIN UNIQUEMENT)
+    Route::get('/expired', [CardController::class, 'getExpiredCards']);
+    
+    // Récupérer le solde de la carte de l'utilisateur connecté
+    Route::get('/user/balance', [CardController::class, 'getUserCardBalance']);
+    
+    
+    // ------------------------------------------
+    // VÉRIFICATION ET SÉCURITÉ
+    // ------------------------------------------
+    
+    // Vérifier l'accès à une carte via le code de vérification
+    Route::post('/verify', [CardController::class, 'verifyAccess']);
+    
+    // Bloquer sa propre carte pour raisons de sécurité/fraude
+    Route::post('/user/block-security', [CardController::class, 'blockUserCardForSecurity']);
+    
+    
+    // ------------------------------------------
+    // ACTIONS EN LOT (ADMIN UNIQUEMENT) - AVANT les routes avec {card}
+    // ------------------------------------------
+    
+    // Activer plusieurs cartes en une fois
+    Route::post('/bulk/activate', [CardController::class, 'bulkActivate']);
+    
+    // Bloquer plusieurs cartes en une fois
+    Route::post('/bulk/block', [CardController::class, 'bulkBlock']);
+    
+    // Supprimer plusieurs cartes en une fois (soft delete)
+    Route::post('/bulk/delete', [CardController::class, 'bulkDelete']);
+    
+    
+    // ------------------------------------------
+    // TÂCHES PLANIFIÉES / MAINTENANCE
+    // ------------------------------------------
+    
+    // Vérifier et bloquer les cartes expirées (à appeler via un cron job)
+    Route::post('/check-expired', [CardController::class, 'checkAndBlockExpired']);
+    
+    
+    // ------------------------------------------
+    // ROUTES AVEC PARAMÈTRE {card} - EN DERNIER
+    // ------------------------------------------
+    
     // Récupérer les détails d'une carte spécifique
     Route::get('/{card}', [CardController::class, 'show']);
-
-    // pour récupérer la carte de l'utilisateur connecté
-    // Route::get('/user', [CardController::class, 'getUserCards']);
-
-    // Récupérer le solde d'une carte specifique
+    
+    // Récupérer le solde d'une carte spécifique (ADMIN UNIQUEMENT)
     Route::get('/{card}/balance', [CardController::class, 'getBalance']);
-
-
-
-    // Routes de blocage pour différentes raisons
+    
+    
+    // ------------------------------------------
+    // RECHARGE DE CARTE
+    // ------------------------------------------
+    
+    // Recharger une carte via Wave ou Orange Money
+    Route::post('/{card}/recharge', [CardController::class, 'recharge'])
+        ->name('cards.recharge');
+    
+    
+    // ------------------------------------------
+    // GESTION DES STATUTS (ADMIN UNIQUEMENT)
+    // ------------------------------------------
+    
+    // Activer une carte
+    Route::post('/{card}/activate', [CardController::class, 'activate']);
+    
+    // Désactiver une carte
+    Route::post('/{card}/deactivate', [CardController::class, 'deactivate']);
+    
+    // Bloquer une carte pour raisons administratives (lost, stolen, suspicious, etc.)
     Route::post('/{card}/block-administrative', [CardController::class, 'blockForAdministrative']);
-    Route::post('/{card}/block-suspicious', [CardController::class, 'blockForSuspiciousActivity']);
-
+    
     // Débloquer une carte
     Route::post('/{card}/unblock', [CardController::class, 'unblock']);
+    
+    
+    // ------------------------------------------
+    // GESTION DU CYCLE DE VIE (ADMIN UNIQUEMENT)
+    // ------------------------------------------
+    
+    // Renouveler une carte expirée (prolonger la date d'expiration)
+    Route::post('/{card}/renew', [CardController::class, 'renew']);
+    
+    // Archiver une carte (soft delete)
+    Route::delete('/{card}/archive', [CardController::class, 'archive']);
+    
+    // Restaurer une carte archivée
+    Route::post('/{card}/restore', [CardController::class, 'restore']);
+    
+    // Supprimer définitivement une carte (hard delete)
+    Route::delete('/{card}/force-delete', [CardController::class, 'forceDelete']);
+    
+    // Vérifier et bloquer une carte spécifique si expirée
+    Route::post('/{card}/check-expired', [CardController::class, 'checkAndBlockExpired']);
 });
 
 /*
@@ -350,11 +432,19 @@ Route::prefix('admin/logs')->middleware('auth:api')->group(function () {
 
 
 
+use App\Http\Controllers\WavePaymentController;
 
-Route::get('/payment-success', function () {
-    return response()->json(['message' => 'Paiement réussi']);
-})->name('payment.success');
+// Redirections Wave (accessibles publiquement, sans auth)
+Route::prefix('payment/wave')->group(function () {
+    Route::get('/success', [WavePaymentController::class, 'success'])
+        ->name('payment.wave.success');
+    
+    Route::get('/error', [WavePaymentController::class, 'error'])
+        ->name('payment.wave.error');
+});
 
-Route::get('/payment-cancel', function () {
-    return response()->json(['message' => 'Paiement annulé']);
-})->name('payment.cancel');
+// Vérification manuelle du statut (protégé par auth)
+Route::middleware('auth:api')->group(function () {
+    Route::get('/payment/wave/check/{sessionId}', [WavePaymentController::class, 'checkStatus'])
+        ->name('payment.wave.check');
+});

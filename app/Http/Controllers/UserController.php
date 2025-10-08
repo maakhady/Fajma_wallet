@@ -780,254 +780,257 @@ class UserController extends Controller
         }
     }
 
-/**
- * Supprimer définitivement un utilisateur
- *
- * @param int $id
- * @return \Illuminate\Http\JsonResponse
- */
-public function forceDelete($id)
-{
-    try {
-        // Vérifier que l'utilisateur est admin
-        $currentUser = auth('api')->user();
-        if (!$currentUser || !$currentUser->hasRole('admin')) {
-            return response()->json([
-                'error' => 'Accès non autorisé. Seuls les administrateurs peuvent supprimer définitivement des utilisateurs.'
-            ], Response::HTTP_FORBIDDEN);
-        }
-
-        $user = User::withTrashed()->findOrFail($id);
-
-        // Un admin ne peut pas se supprimer lui-même
-        if ($user->id === $currentUser->id) {
-            return response()->json([
-                'error' => 'Vous ne pouvez pas supprimer définitivement votre propre compte.'
-            ], Response::HTTP_FORBIDDEN);
-        }
-
-        // Vérification supplémentaire : éviter de supprimer le dernier admin
-        if ($user->hasRole('admin')) {
-            $adminCount = User::whereHas('roles', function($query) {
-                $query->where('name', 'admin');
-            })->count();
-            
-            if ($adminCount <= 1) {
+    /**
+     * Supprimer définitivement un utilisateur
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function forceDelete($id)
+    {
+        try {
+            // Vérifier que l'utilisateur est admin
+            $currentUser = auth('api')->user();
+            if (!$currentUser || !$currentUser->hasRole('admin')) {
                 return response()->json([
-                    'error' => 'Impossible de supprimer le dernier administrateur du système.'
+                    'error' => 'Accès non autorisé. Seuls les administrateurs peuvent supprimer définitivement des utilisateurs.'
                 ], Response::HTTP_FORBIDDEN);
             }
+
+            $user = User::withTrashed()->findOrFail($id);
+
+            // Un admin ne peut pas se supprimer lui-même
+            if ($user->id === $currentUser->id) {
+                return response()->json([
+                    'error' => 'Vous ne pouvez pas supprimer définitivement votre propre compte.'
+                ], Response::HTTP_FORBIDDEN);
+            }
+
+            // Vérification supplémentaire : éviter de supprimer le dernier admin
+            if ($user->hasRole('admin')) {
+                $adminCount = User::whereHas('roles', function($query) {
+                    $query->where('name', 'admin');
+                })->count();
+                
+                if ($adminCount <= 1) {
+                    return response()->json([
+                        'error' => 'Impossible de supprimer le dernier administrateur du système.'
+                    ], Response::HTTP_FORBIDDEN);
+                }
+            }
+
+            // Si l'utilisateur a des transactions ou cartes, on l'anonymise au lieu de le supprimer
+            $hasTransactions = $user->transactions()->count() > 0;
+            $hasCards = $user->cards()->count() > 0; // Changé de healthCards() à cards()
+
+            if ($hasTransactions || $hasCards) {
+                return $this->anonymizeUser($user, $hasTransactions, $hasCards);
+            }
+
+            // Pas de données liées : suppression complète possible
+            if ($user->profile_photo) {
+                Storage::delete($user->profile_photo);
+            }
+
+            if ($user->avatar) {
+                Storage::delete($user->avatar);
+            }
+
+            $this->logAction('force_delete_user', $user->id, 
+                'Suppression définitive de l\'utilisateur: ' . $user->first_name . ' ' . $user->last_name . ' (' . $user->email . ')');
+
+            $user->forceDelete();
+
+            return response()->json([
+                'message' => 'Utilisateur supprimé définitivement avec succès'
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'error' => 'Utilisateur non trouvé (même dans les archives).'
+            ], Response::HTTP_NOT_FOUND);
+        } catch (\Exception $e) {
+            LogFacade::error('Erreur suppression définitive utilisateur: ' . $e->getMessage());
+
+            return response()->json([
+                'error' => 'Erreur lors de la suppression définitive de l\'utilisateur: ' . $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
+    }
 
-        // Si l'utilisateur a des transactions ou cartes, on l'anonymise au lieu de le supprimer
-        $hasTransactions = $user->transactions()->count() > 0;
-        $hasCards = $user->cards()->count() > 0; // Changé de healthCards() à cards()
 
-        if ($hasTransactions || $hasCards) {
-            return $this->anonymizeUser($user, $hasTransactions, $hasCards);
-        }
+    /**
+     * Apres suppression pour eviter de perdre les données de l'utilisateur 
+     * supprimer definitive je l'anomyse dans le systeme pour ne pas perdre sa traçabilité
+     */
 
-        // Pas de données liées : suppression complète possible
+    private function anonymizeUser($user, $hasTransactions, $hasCards)
+    {
+        // Sauvegarder les infos pour le log
+        $originalEmail = $user->email;
+        $originalName = $user->first_name . ' ' . $user->last_name;
+
+        // Anonymiser les données personnelles
+        // $user->first_name = 'Utilisateur';
+        // $user->last_name = 'Supprimé';
+        $user->email;
+        $anonymizedEmail = 'deleted_' . $user->id . '_' . uniqid() . '@anonymized.local';
+        $user->email = $anonymizedEmail;
+        $user->contact_email = $anonymizedEmail;
+        $user->phone = null;
+        
+        // Supprimer la photo de profil
         if ($user->profile_photo) {
             Storage::delete($user->profile_photo);
+            $user->profile_photo = null;
         }
 
-        if ($user->avatar) {
-            Storage::delete($user->avatar);
+        // S'assurer que le soft delete est appliqué
+        if (!$user->trashed()) {
+            $user->deleted_at = now();
         }
 
-        $this->logAction('force_delete_user', $user->id, 
-            'Suppression définitive de l\'utilisateur: ' . $user->first_name . ' ' . $user->last_name . ' (' . $user->email . ')');
+        $user->save();
 
-        $user->forceDelete();
+        // Préparer le message de retour
+        $keptData = [];
+        if ($hasTransactions) $keptData[] = 'transactions';
+        if ($hasCards) $keptData[] = 'cartes';
+        $keptDataStr = implode(' et ', $keptData);
 
-        return response()->json([
-            'message' => 'Utilisateur supprimé définitivement avec succès'
+        // Remplacer logAction par LogFacade
+        LogFacade::info("Anonymisation de l'utilisateur", [
+            'user_id' => $user->id,
+            'original_name' => $originalName,
+            'original_email' => $originalEmail,
+            'kept_data' => $keptDataStr,
+            'action' => 'anonymize_user'
         ]);
 
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
         return response()->json([
-            'error' => 'Utilisateur non trouvé (même dans les archives).'
-        ], Response::HTTP_NOT_FOUND);
-    } catch (\Exception $e) {
-        LogFacade::error('Erreur suppression définitive utilisateur: ' . $e->getMessage());
-
-        return response()->json([
-            'error' => 'Erreur lors de la suppression définitive de l\'utilisateur: ' . $e->getMessage()
-        ], Response::HTTP_INTERNAL_SERVER_ERROR);
-    }
-}
-/**
- * Apres suppression pour eviter de perdre les données de l'utilisateur 
- * supprimer definitive je l'anomyse dans le systeme pour ne pas perdre sa traçabilité
- */
-
-private function anonymizeUser($user, $hasTransactions, $hasCards)
-{
-    // Sauvegarder les infos pour le log
-    $originalEmail = $user->email;
-    $originalName = $user->first_name . ' ' . $user->last_name;
-
-    // Anonymiser les données personnelles
-    // $user->first_name = 'Utilisateur';
-    // $user->last_name = 'Supprimé';
-    $anonymizedEmail = 'deleted_' . $user->id . '_' . uniqid() . '@anonymized.local';
-    $user->email = $anonymizedEmail;
-    $user->contact_email = $anonymizedEmail;
-    $user->phone = null;
-    
-    // Supprimer la photo de profil
-    if ($user->profile_photo) {
-        Storage::delete($user->profile_photo);
-        $user->profile_photo = null;
+            'message' => "Utilisateur Supprimé  avec succès. Les $keptDataStr ont été conservées pour la traçabilité.",
+            'action' => 'anonymized'
+        ]);
     }
 
-    // S'assurer que le soft delete est appliqué
-    if (!$user->trashed()) {
-        $user->deleted_at = now();
-    }
+    /**
+     * Récupère la liste de tous les utilisateurs anonymisés
+     */
+    public function getAnonymizedUsers()
+    {
+        try {
+            // Vérifier que l'utilisateur est admin
+            $currentUser = auth('api')->user();
+            if (!$currentUser || !$currentUser->hasRole('admin')) {
+                return response()->json([
+                    'error' => 'Accès non autorisé. Seuls les administrateurs peuvent consulter ces données.'
+                ], Response::HTTP_FORBIDDEN);
+            }
 
-    $user->save();
+            // Récupérer les utilisateurs anonymisés (soft deleted avec email anonymisé)
+            $anonymizedUsers = User::onlyTrashed()
+                ->where('email', 'LIKE', 'deleted_%@anonymized.local')
+                ->select([
+                    'id',
+                    'first_name',
+                    'last_name',
+                    'email',
+                    'phone',
+                    'role',
+                    'deleted_at',
+                    'updated_at'
+                ])
+                ->withCount(['transactions', 'cards']) // Compte les relations
+                ->orderBy('deleted_at', 'desc')
+                ->paginate(15);
 
-    // Préparer le message de retour
-    $keptData = [];
-    if ($hasTransactions) $keptData[] = 'transactions';
-    if ($hasCards) $keptData[] = 'cartes';
-    $keptDataStr = implode(' et ', $keptData);
-
-    // Remplacer logAction par LogFacade
-    LogFacade::info("Anonymisation de l'utilisateur", [
-        'user_id' => $user->id,
-        'original_name' => $originalName,
-        'original_email' => $originalEmail,
-        'kept_data' => $keptDataStr,
-        'action' => 'anonymize_user'
-    ]);
-
-    return response()->json([
-        'message' => "Utilisateur Supprimé  avec succès. Les $keptDataStr ont été conservées pour la traçabilité.",
-        'action' => 'anonymized'
-    ]);
-}
-
-/**
- * Récupère la liste de tous les utilisateurs anonymisés
- */
-public function getAnonymizedUsers()
-{
-    try {
-        // Vérifier que l'utilisateur est admin
-        $currentUser = auth('api')->user();
-        if (!$currentUser || !$currentUser->hasRole('admin')) {
             return response()->json([
-                'error' => 'Accès non autorisé. Seuls les administrateurs peuvent consulter ces données.'
-            ], Response::HTTP_FORBIDDEN);
-        }
+                'message' => 'Liste des utilisateurs anonymisés récupérée avec succès',
+                'data' => $anonymizedUsers
+            ]);
 
-        // Récupérer les utilisateurs anonymisés (soft deleted avec email anonymisé)
-        $anonymizedUsers = User::onlyTrashed()
-            ->where('email', 'LIKE', 'deleted_%@anonymized.local')
-            ->select([
-                'id',
-                'first_name',
-                'last_name',
-                'email',
-                'phone',
-                'role',
-                'deleted_at',
-                'updated_at'
-            ])
-            ->withCount(['transactions', 'cards']) // Compte les relations
-            ->orderBy('deleted_at', 'desc')
-            ->paginate(15);
+        } catch (\Exception $e) {
+            LogFacade::error('Erreur récupération utilisateurs anonymisés: ' . $e->getMessage());
 
-        return response()->json([
-            'message' => 'Liste des utilisateurs anonymisés récupérée avec succès',
-            'data' => $anonymizedUsers
-        ]);
-
-    } catch (\Exception $e) {
-        LogFacade::error('Erreur récupération utilisateurs anonymisés: ' . $e->getMessage());
-
-        return response()->json([
-            'error' => 'Erreur lors de la récupération des utilisateurs anonymisés'
-        ], Response::HTTP_INTERNAL_SERVER_ERROR);
-    }
-}
-
-/**
- * Récupère les détails complets d'un utilisateur anonymisé
- * avec toutes ses transactions et cartes
- */
-public function getAnonymizedUserDetails($id)
-{
-    try {
-        // Vérifier que l'utilisateur est admin
-        $currentUser = auth('api')->user();
-        if (!$currentUser || !$currentUser->hasRole('admin')) {
             return response()->json([
-                'error' => 'Accès non autorisé. Seuls les administrateurs peuvent consulter ces données.'
-            ], Response::HTTP_FORBIDDEN);
+                'error' => 'Erreur lors de la récupération des utilisateurs anonymisés'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
-
-        // Récupérer l'utilisateur anonymisé avec ses relations
-        $user = User::onlyTrashed()
-            ->where('id', $id)
-            ->where('email', 'LIKE', 'deleted_%@anonymized.local')
-            ->with([
-                'transactions' => function($query) {
-                    $query->orderBy('created_at', 'desc');
-                },
-                'transactions.paymentMean', // Si tu veux voir le moyen de paiement
-                'cards',
-                'logs' => function($query) {
-                    $query->orderBy('created_at', 'desc')->limit(50);
-                }
-            ])
-            ->firstOrFail();
-
-        // Calculer des statistiques
-        $statistics = [
-            'total_transactions' => $user->transactions->count(),
-            'total_amount' => $user->transactions->sum('amount'),
-            'total_cards' => $user->cards->count(),
-            'first_transaction' => $user->transactions->last()?->created_at,
-            'last_transaction' => $user->transactions->first()?->created_at,
-        ];
-
-        return response()->json([
-            'message' => 'Détails de l\'utilisateur anonymisé récupérés avec succès',
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'first_name' => $user->first_name,
-                    'last_name' => $user->last_name,
-                    'email' => $user->email,
-                    'contact_email' => $user->contact_email,
-                    'phone' => $user->phone,
-                    'role' => $user->role,
-                    'deleted_at' => $user->deleted_at,
-                    'created_at' => $user->created_at,
-                    'updated_at' => $user->updated_at,
-                ],
-                'statistics' => $statistics,
-                'transactions' => $user->transactions,
-                'cards' => $user->cards,
-                'logs' => $user->logs
-            ]
-        ]);
-
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        return response()->json([
-            'error' => 'Utilisateur anonymisé non trouvé'
-        ], Response::HTTP_NOT_FOUND);
-    } catch (\Exception $e) {
-        LogFacade::error('Erreur récupération détails utilisateur anonymisé: ' . $e->getMessage());
-
-        return response()->json([
-            'error' => 'Erreur lors de la récupération des détails de l\'utilisateur anonymisé'
-        ], Response::HTTP_INTERNAL_SERVER_ERROR);
     }
-}
+
+    /**
+     * Récupère les détails complets d'un utilisateur anonymisé
+     * avec toutes ses transactions et cartes
+     */
+    public function getAnonymizedUserDetails($id)
+    {
+        try {
+            // Vérifier que l'utilisateur est admin
+            $currentUser = auth('api')->user();
+            if (!$currentUser || !$currentUser->hasRole('admin')) {
+                return response()->json([
+                    'error' => 'Accès non autorisé. Seuls les administrateurs peuvent consulter ces données.'
+                ], Response::HTTP_FORBIDDEN);
+            }
+
+            // Récupérer l'utilisateur anonymisé avec ses relations
+            $user = User::onlyTrashed()
+                ->where('id', $id)
+                ->where('email', 'LIKE', 'deleted_%@anonymized.local')
+                ->with([
+                    'transactions' => function($query) {
+                        $query->orderBy('created_at', 'desc');
+                    },
+                    'transactions.paymentMean', // Si tu veux voir le moyen de paiement
+                    'cards',
+                    'logs' => function($query) {
+                        $query->orderBy('created_at', 'desc')->limit(50);
+                    }
+                ])
+                ->firstOrFail();
+
+            // Calculer des statistiques
+            $statistics = [
+                'total_transactions' => $user->transactions->count(),
+                'total_amount' => $user->transactions->sum('amount'),
+                'total_cards' => $user->cards->count(),
+                'first_transaction' => $user->transactions->last()?->created_at,
+                'last_transaction' => $user->transactions->first()?->created_at,
+            ];
+
+            return response()->json([
+                'message' => 'Détails de l\'utilisateur anonymisé récupérés avec succès',
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'first_name' => $user->first_name,
+                        'last_name' => $user->last_name,
+                        'email' => $user->email,
+                        'contact_email' => $user->contact_email,
+                        'phone' => $user->phone,
+                        'role' => $user->role,
+                        'deleted_at' => $user->deleted_at,
+                        'created_at' => $user->created_at,
+                        'updated_at' => $user->updated_at,
+                    ],
+                    'statistics' => $statistics,
+                    'transactions' => $user->transactions,
+                    'cards' => $user->cards,
+                    'logs' => $user->logs
+                ]
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'error' => 'Utilisateur anonymisé non trouvé'
+            ], Response::HTTP_NOT_FOUND);
+        } catch (\Exception $e) {
+            LogFacade::error('Erreur récupération détails utilisateur anonymisé: ' . $e->getMessage());
+
+            return response()->json([
+                'error' => 'Erreur lors de la récupération des détails de l\'utilisateur anonymisé'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
 
 }

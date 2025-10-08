@@ -51,6 +51,8 @@ return [
     'success_url' => env('WAVE_SUCCESS_URL'),
     'error_url' => env('WAVE_ERROR_URL'),
     'webhook_secret' => env('WAVE_WEBHOOK_SECRET'),
+    'currency' => env('WAVE_CURRENCY', 'XOF'), 
+    'balance_enabled' => env('WAVE_BALANCE_ENABLED', false), 
 ],
 
 

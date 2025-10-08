@@ -735,4 +735,710 @@ public function unblock($id, Request $request)
 
         return $cardNumber;
     }
+
+
+
+
+/**
+ * Active une carte (admin uniquement)
+ */
+public function activate($id, Request $request)
+{
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $card = Card::findOrFail($id);
+        
+        if ($card->status === 'activated') {
+            return response()->json([
+                'message' => 'La carte est déjà activée',
+                'card' => $card
+            ]);
+        }
+        
+        $card->status = 'activated';
+        $card->save();
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'activate_card',
+            'entity_type' => 'card',
+            'entity_id' => $card->id,
+            'description' => 'Activation de la carte par admin: ' . ($request->reason ?? 'Non spécifié')
+        ]);
+        
+        return response()->json([
+            'message' => 'Carte activée avec succès',
+            'card' => $card
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur activation carte: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de l\'activation de la carte'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+/**
+ * Désactive une carte (admin uniquement)
+ */
+public function deactivate($id, Request $request)
+{
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $card = Card::findOrFail($id);
+        
+        if ($card->status === 'deactivated') {
+            return response()->json([
+                'message' => 'La carte est déjà désactivée',
+                'card' => $card
+            ]);
+        }
+        
+        $card->status = 'deactivated';
+        $card->save();
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'deactivate_card',
+            'entity_type' => 'card',
+            'entity_id' => $card->id,
+            'description' => 'Désactivation de la carte: ' . ($request->reason ?? 'Non spécifié')
+        ]);
+        
+        return response()->json([
+            'message' => 'Carte désactivée avec succès',
+            'card' => $card
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur désactivation carte: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de la désactivation'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+// /**
+//  * Recharge le solde d'une carte (admin uniquement)
+//  */
+// public function recharge($id, Request $request)
+// {
+//     $request->validate([
+//         'amount' => 'required|numeric|min:100'
+//     ]);
+    
+//     try {
+//         $user = auth('api')->user();
+        
+//         if ($user->role !== 'admin') {
+//             return response()->json([
+//                 'error' => 'Action non autorisée'
+//             ], Response::HTTP_FORBIDDEN);
+//         }
+        
+//         $card = Card::findOrFail($id);
+        
+//         if ($card->status !== 'activated') {
+//             return response()->json([
+//                 'error' => 'La carte doit être activée pour être rechargée'
+//             ], Response::HTTP_BAD_REQUEST);
+//         }
+        
+//         $card->balance += $request->amount;
+//         $card->save();
+        
+//         Log::create([
+//             'user_id' => $user->id,
+//             'action' => 'recharge_card',
+//             'entity_type' => 'card',
+//             'entity_id' => $card->id,
+//             'description' => 'Rechargement de ' . $request->amount . ' FCFA'
+//         ]);
+        
+//         return response()->json([
+//             'message' => 'Carte rechargée avec succès',
+//             'card' => $card,
+//             'new_balance' => $card->balance
+//         ]);
+        
+//     } catch (\Exception $e) {
+//         LogFacade::error('Erreur rechargement carte: ' . $e->getMessage());
+//         return response()->json([
+//             'error' => 'Erreur lors du rechargement'
+//         ], Response::HTTP_INTERNAL_SERVER_ERROR);
+//     }
+// }
+
+/**
+ * Renouvelle une carte expirée (admin uniquement)
+ */
+public function renew($id, Request $request)
+{
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $card = Card::findOrFail($id);
+        
+        // Nouvelle date d'expiration : 3 ans
+        $newExpiryDate = date('Y-m-d', strtotime('+3 years'));
+        $card->expires_at = $newExpiryDate;
+        
+        // Si la carte était bloquée pour expiration, on la réactive
+        if ($card->isExpired() && $card->status === 'blocked') {
+            $card->status = 'activated';
+        }
+        
+        $card->save();
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'renew_card',
+            'entity_type' => 'card',
+            'entity_id' => $card->id,
+            'description' => 'Renouvellement de la carte jusqu\'au ' . $newExpiryDate
+        ]);
+        
+        return response()->json([
+            'message' => 'Carte renouvelée avec succès',
+            'card' => $card,
+            'new_expiry_date' => $newExpiryDate
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur renouvellement carte: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors du renouvellement'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+
+/**
+ * Lister toutes les cartes expirées (admin uniquement)
+ *
+ * @param Request $request
+ * @return \Illuminate\Http\JsonResponse
+ */
+public function getExpiredCards(Request $request)
+{
+    try {
+        // Récupérer l'utilisateur authentifié
+        $user = auth('api')->user();
+
+        // Vérifier si l'utilisateur est admin
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Accès non autorisé. Seuls les administrateurs peuvent voir les cartes expirées.'
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        // Construire la requête de base pour les cartes expirées
+        $query = Card::where('expires_at', '<', date('Y-m-d'))
+            ->with(['user:id,first_name,last_name,email']);
+
+        // Options de filtrage
+        // Filtrer par statut si spécifié
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Filtrer par type de carte si spécifié
+        if ($request->has('type_card')) {
+            $query->where('type_card', $request->type_card);
+        }
+
+        // Inclure ou non les cartes archivées
+        if ($request->has('include_archived') && $request->include_archived === 'true') {
+            $query->withTrashed();
+        }
+
+        // Tri par date d'expiration (les plus anciennes en premier par défaut)
+        $sortOrder = $request->get('sort_order', 'asc');
+        $query->orderBy('expires_at', $sortOrder);
+
+        // Récupérer les cartes expirées
+        $expiredCards = $query->get();
+
+        // Statistiques
+        $stats = [
+            'total_expired' => $expiredCards->count(),
+            'blocked' => $expiredCards->where('status', 'blocked')->count(),
+            'activated' => $expiredCards->where('status', 'activated')->count(),
+            'deactivated' => $expiredCards->where('status', 'deactivated')->count(),
+            'virtual' => $expiredCards->where('type_card', 'virtual')->count(),
+            'physical' => $expiredCards->where('type_card', 'physical')->count(),
+        ];
+
+        // Journaliser la consultation
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'view_expired_cards',
+            'entity_type' => 'card',
+            'description' => "Consultation de {$expiredCards->count()} carte(s) expirée(s)"
+        ]);
+
+        return response()->json([
+            'expired_cards' => $expiredCards,
+            'statistics' => $stats,
+            'filters_applied' => [
+                'status' => $request->status ?? 'all',
+                'type_card' => $request->type_card ?? 'all',
+                'include_archived' => $request->include_archived === 'true',
+                'sort_order' => $sortOrder
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        // Journaliser l'erreur
+        LogFacade::error('Erreur récupération cartes expirées: ' . $e->getMessage());
+
+        return response()->json([
+            'error' => 'Erreur lors de la récupération des cartes expirées'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+/**
+ * Archive une carte (soft delete)
+ */
+public function archive($id)
+{
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $card = Card::findOrFail($id);
+        $card->delete(); // Soft delete grâce au trait SoftDeletes
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'archive_card',
+            'entity_type' => 'card',
+            'entity_id' => $card->id,
+            'description' => 'Archivage de la carte'
+        ]);
+        
+        return response()->json([
+            'message' => 'Carte archivée avec succès'
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur archivage carte: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de l\'archivage'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+/**
+ * Restaure une carte archivée
+ */
+public function restore($id)
+{
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $card = Card::withTrashed()->findOrFail($id);
+        $card->restore();
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'restore_card',
+            'entity_type' => 'card',
+            'entity_id' => $card->id,
+            'description' => 'Restauration de la carte'
+        ]);
+        
+        return response()->json([
+            'message' => 'Carte restaurée avec succès',
+            'card' => $card
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur restauration carte: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de la restauration'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+/**
+ * Récupère les cartes archivées
+ */
+public function getArchivedCards()
+{
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $cards = Card::onlyTrashed()
+            ->with(['user'])
+            ->get();
+        
+        return response()->json([
+            'cards' => $cards
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur récupération cartes archivées: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de la récupération'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+/**
+ * Suppression définitive (hard delete)
+ */
+public function forceDelete($id)
+{
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $card = Card::withTrashed()->findOrFail($id);
+        $cardNumber = $card->card_number;
+        
+        $card->forceDelete();
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'force_delete_card',
+            'entity_type' => 'card',
+            'entity_id' => $id,
+            'description' => 'Suppression définitive de la carte ' . $cardNumber
+        ]);
+        
+        return response()->json([
+            'message' => 'Carte supprimée définitivement'
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur suppression définitive carte: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de la suppression'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+/**
+ * Actions en lot - Activation
+ */
+public function bulkActivate(Request $request)
+{
+    $request->validate([
+        'card_ids' => 'required|array',
+        'card_ids.*' => 'exists:cards,id'
+    ]);
+    
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $success = 0;
+        $failed = 0;
+        
+        foreach ($request->card_ids as $cardId) {
+            try {
+                $card = Card::find($cardId);
+                if ($card && $card->status !== 'activated') {
+                    $card->status = 'activated';
+                    $card->save();
+                    $success++;
+                }
+            } catch (\Exception $e) {
+                $failed++;
+            }
+        }
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'bulk_activate_cards',
+            'entity_type' => 'card',
+            'description' => "Activation en lot: {$success} réussies, {$failed} échouées"
+        ]);
+        
+        return response()->json([
+            'message' => "Activation terminée",
+            'success' => $success,
+            'failed' => $failed
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur activation en lot: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de l\'activation en lot'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+/**
+ * Actions en lot - Blocage
+ */
+public function bulkBlock(Request $request)
+{
+    $request->validate([
+        'card_ids' => 'required|array',
+        'card_ids.*' => 'exists:cards,id',
+        'reason' => 'required|string'
+    ]);
+    
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $success = 0;
+        $failed = 0;
+        
+        foreach ($request->card_ids as $cardId) {
+            try {
+                $card = Card::find($cardId);
+                if ($card && $card->status !== 'blocked') {
+                    $card->status = 'blocked';
+                    $card->save();
+                    $success++;
+                }
+            } catch (\Exception $e) {
+                $failed++;
+            }
+        }
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'bulk_block_cards',
+            'entity_type' => 'card',
+            'description' => "Blocage en lot ({$request->reason}): {$success} réussies, {$failed} échouées"
+        ]);
+        
+        return response()->json([
+            'message' => "Blocage terminé",
+            'success' => $success,
+            'failed' => $failed
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur blocage en lot: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors du blocage en lot'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+/**
+ * Actions en lot - Suppression
+ */
+public function bulkDelete(Request $request)
+{
+    $request->validate([
+        'card_ids' => 'required|array',
+        'card_ids.*' => 'exists:cards,id'
+    ]);
+    
+    try {
+        $user = auth('api')->user();
+        
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Action non autorisée'
+            ], Response::HTTP_FORBIDDEN);
+        }
+        
+        $success = 0;
+        $failed = 0;
+        
+        foreach ($request->card_ids as $cardId) {
+            try {
+                $card = Card::find($cardId);
+                if ($card) {
+                    $card->delete(); // Soft delete
+                    $success++;
+                }
+            } catch (\Exception $e) {
+                $failed++;
+            }
+        }
+        
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'bulk_delete_cards',
+            'entity_type' => 'card',
+            'description' => "Suppression en lot: {$success} réussies, {$failed} échouées"
+        ]);
+        
+        return response()->json([
+            'message' => "Suppression terminée",
+            'success' => $success,
+            'failed' => $failed
+        ]);
+        
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur suppression en lot: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Erreur lors de la suppression en lot'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
+
+
+/**
+ * Recharger une carte via Wave ou Orange Money
+ *
+ * POST /api/cards/{card}/recharge
+ */
+public function recharge(Request $request, $id)
+{
+    $request->validate([
+        'amount' => 'required|numeric|min:100|max:1000000',
+        'payment_mean_id' => 'required|exists:payment_means,id'
+    ]);
+
+    try {
+        $user = auth('api')->user();
+
+        // Vérifier que la carte appartient à l'utilisateur (sauf admin)
+        $card = Card::where('id', $id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$card && $user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Carte introuvable ou accès non autorisé'
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        // Si admin, récupérer la carte sans vérifier le propriétaire
+        if (!$card) {
+            $card = Card::findOrFail($id);
+        }
+
+        // Vérifier que la carte est active
+        if ($card->status !== 'activated') {
+            return response()->json([
+                'error' => 'Cette carte n\'est pas active et ne peut pas être rechargée'
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
+        // Préparer les données pour le service de transaction
+        $depositData = [
+            'card_id' => $card->id,
+            'user_id' => $card->user_id, // Utiliser l'ID du propriétaire de la carte
+            'amount' => $request->amount,
+            'payment_mean_id' => $request->payment_mean_id,
+            'description' => 'Rechargement de la carte ' . $card->card_number,
+            'metadata' => [
+                'initiated_by' => $user->id,
+                'initiated_at' => now()->toISOString(),
+            ]
+        ];
+
+        // Appeler le service de transaction pour traiter le dépôt
+        $transactionService = app(\App\Services\TransactionService::class);
+        $result = $transactionService->processDeposit($depositData);
+
+        if (!$result['success']) {
+            return response()->json([
+                'error' => $result['message'],
+                'details' => $result['errors'] ?? null
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // Journaliser l'action
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'initiate_card_recharge',
+            'entity_type' => 'card',
+            'entity_id' => $card->id,
+            'description' => "Rechargement de {$request->amount} FCFA initié pour la carte #{$card->card_number}"
+        ]);
+
+        // Retourner la réponse appropriée selon le provider
+        if ($result['provider'] === 'wave') {
+            return response()->json([
+                'success' => true,
+                'provider' => 'wave',
+                'status' => 'pending',
+                'message' => 'Session de paiement Wave créée. Redirigez l\'utilisateur vers l\'URL fournie.',
+                'redirect_url' => $result['redirect_url'],
+                'transaction' => $result['transaction']
+            ], Response::HTTP_ACCEPTED);
+        }
+
+        if ($result['provider'] === 'orange_money') {
+            return response()->json([
+                'success' => true,
+                'provider' => 'orange_money',
+                'status' => $result['status'],
+                'message' => 'Rechargement effectué avec succès',
+                'transaction' => $result['transaction']
+            ], Response::HTTP_OK);
+        }
+
+        // Cas générique
+        return response()->json([
+            'success' => true,
+            'message' => 'Rechargement initié avec succès',
+            'transaction' => $result['transaction']
+        ], Response::HTTP_ACCEPTED);
+
+    } catch (\Exception $e) {
+        LogFacade::error('Erreur rechargement carte: ' . $e->getMessage());
+
+        return response()->json([
+            'error' => 'Erreur lors du rechargement de la carte',
+            'details' => $e->getMessage()
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
 }

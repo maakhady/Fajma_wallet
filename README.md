@@ -61,11 +61,6 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 
 
-
-
-
-Absolument \! Voici une version du `README.md` qui se concentre exclusivement sur le backend, en retirant toute mention de Node.js, npm, ou Vite.
-
 -----
 
 # Fajma Wallet (Backend)

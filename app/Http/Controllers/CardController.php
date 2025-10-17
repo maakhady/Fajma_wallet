@@ -126,41 +126,74 @@ public function index()
     }
 
     /**
-     * Récupérer les détails d'une carte spécifique
-     *
-     * @param int $id Identifiant de la carte
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function show($id)
-    {
-        try {
-            // Récupérer l'utilisateur authentifié
-            $user = auth('api')->user();
+ * Récupérer les détails d'une carte spécifique
+ * - Admin : peut voir toutes les cartes
+ * - User : uniquement ses propres cartes
+ *
+ * @param int $id Identifiant de la carte
+ * @return \Illuminate\Http\JsonResponse
+ */
+public function show($id)
+{
+    try {
+        // Récupérer l'utilisateur authentifié
+        $user = auth('api')->user();
 
-            // Récupérer la carte avec ses transactions
-            $card = $user->cards()->with('transactions')->findOrFail($id);
-
-            // Journaliser la consultation
-            Log::create([
-                'user_id' => $user->id,
-                'action' => 'view_card',
-                'entity_type' => 'card',
-                'entity_id' => $card->id,
-                'description' => 'Consultation des détails de la carte'
-            ]);
-
+        if (!$user) {
             return response()->json([
-                'card' => $card
-            ]);
-        } catch (\Exception $e) {
-            // Journaliser l'erreur
-            LogFacade::error('Erreur détails carte: ' . $e->getMessage());
-
-            return response()->json([
-                'error' => 'Carte introuvable ou accès non autorisé'
-            ], Response::HTTP_NOT_FOUND);
+                'error' => 'Utilisateur non authentifié'
+            ], Response::HTTP_UNAUTHORIZED);
         }
+
+        // Si admin : peut voir toutes les cartes
+        if ($user->role === 'admin') {
+            $card = Card::with([
+                'user',
+                'transactions' => function ($query) {
+                    $query->orderBy('transaction_date', 'desc')->limit(10);
+                },
+                'transactions.transactionType',
+                'transactions.paymentStatus'
+            ])->findOrFail($id);
+        } else {
+            // Si user normal : uniquement ses cartes
+            $card = $user->cards()
+                ->with([
+                    'transactions' => function ($query) {
+                        $query->orderBy('transaction_date', 'desc')->limit(10);
+                    },
+                    'transactions.transactionType',
+                    'transactions.paymentStatus'
+                ])
+                ->findOrFail($id);
+        }
+
+        // Journaliser la consultation
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'view_card',
+            'entity_type' => 'card',
+            'entity_id' => $card->id,
+            'description' => 'Consultation des détails de la carte #' . $card->card_number
+        ]);
+
+        return response()->json([
+            'card' => $card
+        ]);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'error' => 'Carte introuvable ou accès non autorisé'
+        ], Response::HTTP_NOT_FOUND);
+    } catch (\Exception $e) {
+        // Journaliser l'erreur
+        LogFacade::error('Erreur détails carte: ' . $e->getMessage());
+
+        return response()->json([
+            'error' => 'Erreur lors de la récupération des détails de la carte'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
     }
+}
 
 
         /**
@@ -883,6 +916,69 @@ public function deactivate($id, Request $request)
 //         ], Response::HTTP_INTERNAL_SERVER_ERROR);
 //     }
 // }
+
+/**
+ * Récupérer les transactions d'une carte spécifique
+ *
+ * @param int $id Identifiant de la carte
+ * @return \Illuminate\Http\JsonResponse
+ */
+public function getTransactions($id)
+{
+    try {
+        // Récupérer l'utilisateur authentifié
+        $user = auth('api')->user();
+
+        // Récupérer la carte
+        // Si admin : peut voir toutes les cartes
+        // Si user : uniquement ses cartes
+        if ($user->role === 'admin') {
+            $card = Card::with([
+                'transactions' => function ($query) {
+                    $query->orderBy('transaction_date', 'desc');
+                },
+                'transactions.transactionType',
+                'transactions.paymentStatus',
+                'transactions.provider',
+                'transactions.paymentMean'
+            ])->findOrFail($id);
+        } else {
+            $card = $user->cards()
+                ->with([
+                    'transactions' => function ($query) {
+                        $query->orderBy('transaction_date', 'desc');
+                    },
+                    'transactions.transactionType',
+                    'transactions.paymentStatus',
+                    'transactions.provider',
+                    'transactions.paymentMean'
+                ])
+                ->findOrFail($id);
+        }
+
+        // Journaliser la consultation
+        Log::create([
+            'user_id' => $user->id,
+            'action' => 'view_card_transactions',
+            'entity_type' => 'card',
+            'entity_id' => $card->id,
+            'description' => 'Consultation des transactions de la carte #' . $card->card_number
+        ]);
+
+        return response()->json([
+            'transactions' => $card->transactions
+        ]);
+
+    } catch (\Exception $e) {
+        // Journaliser l'erreur
+        LogFacade::error('Erreur récupération transactions carte: ' . $e->getMessage());
+
+        return response()->json([
+            'error' => 'Carte introuvable ou accès non autorisé'
+        ], Response::HTTP_NOT_FOUND);
+    }
+}
+
 
 /**
  * Renouvelle une carte expirée (admin uniquement)

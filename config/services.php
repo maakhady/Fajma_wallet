@@ -46,6 +46,7 @@ return [
 
 
 'wave' => [
+    'enabled' => env('WAVE_ENABLED', false),
     'api_key' => env('WAVE_API_KEY'),
     'base' => env('WAVE_API_BASE', 'https://api.wave.com'),
     'success_url' => env('WAVE_SUCCESS_URL'),

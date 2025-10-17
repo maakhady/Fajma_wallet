@@ -111,6 +111,9 @@ Route::middleware('auth:api')->prefix('cards')->group(function () {
     
     // Récupérer les détails d'une carte spécifique
     Route::get('/{card}', [CardController::class, 'show']);
+
+    // ✅ NOUVELLE ROUTE : Récupérer les transactions d'une carte spécifique
+    Route::get('/{card}/transactions', [CardController::class, 'getTransactions']);
     
     // Récupérer le solde d'une carte spécifique (ADMIN UNIQUEMENT)
     Route::get('/{card}/balance', [CardController::class, 'getBalance']);

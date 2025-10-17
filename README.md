@@ -59,3 +59,166 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+
+
+
+
+Absolument \! Voici une version du `README.md` qui se concentre exclusivement sur le backend, en retirant toute mention de Node.js, npm, ou Vite.
+
+-----
+
+# Fajma Wallet (Backend)
+
+Fajma Wallet est une application web conçue pour la gestion de portefeuille électronique, avec des fonctionnalités telles que l'authentification des utilisateurs, la gestion des cartes, les transactions, etc. Ce projet contient uniquement le backend de l'application, développé avec le framework Laravel.
+
+## Prérequis
+
+Avant de commencer, assurez-vous d'avoir les outils suivants installés sur votre machine :
+
+  * PHP \>= 8.2
+  * Composer (gestionnaire de dépendances PHP)
+  * PostgreSQL (ou un autre SGBD de votre choix, la configuration par défaut est pour PostgreSQL)
+
+## Installation
+
+Suivez ces étapes pour configurer le projet en local :
+
+**1. Cloner le dépôt**
+
+```bash
+git clone <URL_DU_DEPOT>
+cd fajma_wallet
+```
+
+**2. Installer les dépendances PHP**
+
+Installez les dépendances du projet à l'aide de Composer.
+
+```bash
+composer install
+```
+
+**3. Configurer l'environnement**
+
+Copiez le fichier d'exemple `.env.example` pour créer votre propre fichier de configuration `.env`.
+
+```bash
+cp .env.example .env
+```
+
+Ouvrez le fichier `.env` et configurez les variables d'environnement, notamment la connexion à la base de données (`DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`).
+
+**4. Générer la clé de l'application**
+
+Générez une clé de sécurité unique pour votre application Laravel.
+
+```bash
+php artisan key:generate
+```
+
+**5. Migrations et Seeders de la base de données**
+
+Exécutez les migrations pour créer les tables de la base de données, puis remplissez les tables avec les données initiales à l'aide des seeders.
+
+```bash
+php artisan migrate --seed
+```
+
+**6. Générer le secret JWT**
+
+Générez la clé secrète pour l'authentification JWT.
+
+```bash
+php artisan jwt:secret
+```
+
+## Lancement de l'application
+
+Pour lancer l'application, vous devez démarrer le serveur Laravel et l'écouteur de file d'attente (queue).
+
+**1. Démarrer le serveur Laravel**
+
+```bash
+php artisan serve
+```
+
+Votre API sera accessible à l'adresse `http://localhost:8000`.
+
+-----
+
+## API Backend
+
+### Création d'un administrateur
+
+Pour commencer à utiliser l'application, vous devez créer un premier utilisateur avec le rôle d'administrateur. Il existe une route d'inscription libre à cet effet.
+
+**Route :** `POST http://127.0.0.1:8000/api/auth/register`
+
+**Modèle de la requête :**
+
+```json
+{
+    "first_name": "Nom",
+    "last_name": "Prenom",
+    "email": "email de contact",
+    "phone": "Numero telephone valide",
+    "password": "Mot de passe",
+    "password_confirmation": "Confirmation de mot de passe",
+    "role": "admin"
+}
+```
+
+**Réponse en cas de succès :**
+
+À la création de chaque utilisateur, une carte virtuelle Fajma est générée et associée automatiquement.
+
+```json
+{
+    "message": "Inscription réussie.",
+    "user": {
+        "first_name": "Nom",
+        "last_name": "Prenom",
+        "email": "Email generer pour se connecter au dashboard de fajma qui a un domaine fajma.sn",
+        "phone": "telephone",
+        "role": "admin",
+        "verification_code": "10568",
+        "contact_email": "email de contact",
+        "is_active": true,
+        "updated_at": "2025-05-07T16:10:17.000000Z",
+        "created_at": "2025-05-07T16:10:17.000000Z",
+        "id": 1
+    },
+    "card": {
+        "card_number": "FAJMA316760",
+        "type_card": "virtual",
+        "status": "activated",
+        "balance": "0.00",
+        "user_id": 1,
+        "expires_at": "2026-05-07T00:00:00.000000Z",
+        "updated_at": "2025-05-07T16:10:17.000000Z",
+        "created_at": "2025-05-07T16:10:17.000000Z",
+        "id": 1
+    }
+}
+```
+
+-----
+
+  * **Vider le cache de configuration :**
+    ```bash
+    php artisan config:clear
+    ```
+  * **Vider le cache des routes :**
+    ```bash
+    php artisan route:clear
+    ```
+  * **Vider le cache de laravel :**
+    ```bash
+    php artisan cache:clear
+    ```
+
+
+
+
+

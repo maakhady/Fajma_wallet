@@ -1,61 +1,62 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Fajma Wallet — Backend de paiement mobile (Laravel)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Backend d'un portefeuille électronique développé pour le secteur de la e-santé, intégrant les paiements mobiles **Wave** et **Orange Money** pour la gestion des crédits clients. Il expose une API consommée par le back-office Angular ([fajma-backoffice](https://github.com/maakhady/fajma-backoffice)) et une application mobile.
 
-## About Laravel
+> Version de travail personnelle développée dans le cadre de mon stage chez Faj'ma ESANTÉ. La version en production est distincte et propriété de l'entreprise ; ce dépôt ne contient aucune donnée réelle ni identifiant.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Architecture
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Architecture MVC Laravel étendue avec une **couche de services** (`app/Services`) pour la logique métier et des **Request Objects** (`app/Http/Requests`) pour la validation des entrées.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### Couche de services
 
-## Learning Laravel
+| Service | Rôle |
+|---|---|
+| `TransactionService` | Création, validation, suivi et mise à jour des transactions (dépôts, paiements, retraits) |
+| `WaveService` | Intégration de la passerelle de paiement Wave |
+| `OrangeMoneyService` | Intégration de la passerelle de paiement Orange Money |
+| `PaymentTypeService` | Gestion des types de passerelles de paiement |
+| `PaymentMeanService` | Moyens de paiement des utilisateurs (comptes externes, cartes) |
+| `ProviderService` | Gestion des fournisseurs de services |
+| `LogService` | Journalisation des actions du système en base de données |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### Flux de paiement
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+1. La requête utilisateur (`CreateDepositRequest` / `CreatePaymentRequest`) arrive au contrôleur et est déléguée au `TransactionService`
+2. Le `TransactionService` initie le paiement via la passerelle appropriée (`WaveService` ou `OrangeMoneyService`)
+3. Le `WebhookController` reçoit les notifications de statut en temps réel du fournisseur et met à jour l'état de la transaction en base
+4. Les passerelles sont configurables via des requêtes dédiées (`ConfigureWaveRequest`, `ConfigureOrangeMoneyRequest`)
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Modèle de données
 
-## Laravel Sponsors
+Entités principales : `User`, `Transaction`, `Card`, `Provider`, `PaymentType`, `PaymentMean`, `PaymentStatus`, `TransactionType`, `Log`. Une transaction est liée à un utilisateur, une carte, un fournisseur, un type de paiement, un statut et un type de transaction.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Fonctionnalités complémentaires
 
-### Premium Partners
+- **Authentification par tokens** (login, logout, register avec Request Objects dédiés)
+- **Reporting** : exportation des transactions et génération de reçus PDF via des vues Blade
+- **Commandes Artisan** : initialisation des statuts de paiement, maintenance des données, et une commande personnalisée `make:service` pour générer la couche de services
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development/)**
-- **[Active Logic](https://activelogic.com)**
+## Stack technique
 
-## Contributing
+| Couche | Technologies |
+|---|---|
+| Framework | Laravel (PHP) |
+| Base de données | PostgreSQL |
+| Authentification | Tokens (API) |
+| Intégrations | API Wave, API Orange Money (paiement mobile), webhooks |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Lancement local
 
-## Code of Conduct
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan serve
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Auteur
 
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**Mame Khady Laye DIAW** — Développeuse Full-Stack, Dakar
+[GitHub](https://github.com/maakhady) · [LinkedIn](https://linkedin.com/in/mamekhady)
